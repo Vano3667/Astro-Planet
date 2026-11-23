@@ -1,0 +1,22 @@
+; Engine configuration file.
+; Written by hand without running the editor (see docs/STATUS.md).
+; The editor may rewrite this file on first open - that is fine.
+
+config_version=5
+
+[application]
+
+config/name="Astro-Planet"
+run/main_scene="res://main.tscn"
+config/features=PackedStringArray("4.7", "Mobile")
+
+[rendering]
+
+renderer/rendering_method="mobile"
+renderer/rendering_method.mobile="mobile"
+textures/vram_compression/import_etc2_astc=true
+
+[xr]
+
+openxr/enabled=true
+shaders/enabled=true

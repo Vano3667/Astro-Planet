@@ -1,0 +1,148 @@
+name: Build Quest APK
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "game/**"
+      - ".github/workflows/build.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  GODOT_VERSION: "4.7.2"
+  GODOT_STATUS: "stable"
+  GODOT_SETTINGS_VERSION: "4.7"
+  VENDORS_TAG: "5.2.0-stable"
+  GODOT_ANDROID_KEYSTORE_DEBUG_USER: "androiddebugkey"
+  GODOT_ANDROID_KEYSTORE_DEBUG_PASSWORD: "android"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Download Godot and export templates
+        run: |
+          set -euo pipefail
+          base="https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-${GODOT_STATUS}"
+          name="Godot_v${GODOT_VERSION}-${GODOT_STATUS}"
+          curl -fsSL -o "$RUNNER_TEMP/godot.zip" "${base}/${name}_linux.x86_64.zip"
+          curl -fsSL -o "$RUNNER_TEMP/templates.tpz" "${base}/${name}_export_templates.tpz"
+          mkdir -p "$RUNNER_TEMP/godot"
+          unzip -q "$RUNNER_TEMP/godot.zip" -d "$RUNNER_TEMP/godot"
+          mv "$RUNNER_TEMP/godot/${name}_linux.x86_64" "$RUNNER_TEMP/godot/godot"
+          chmod +x "$RUNNER_TEMP/godot/godot"
+          echo "$RUNNER_TEMP/godot" >> "$GITHUB_PATH"
+          tpl="$HOME/.local/share/godot/export_templates/${GODOT_VERSION}.${GODOT_STATUS}"
+          mkdir -p "$tpl"
+          unzip -q "$RUNNER_TEMP/templates.tpz" -d "$RUNNER_TEMP/tpl"
+          mv "$RUNNER_TEMP/tpl/templates/"* "$tpl/"
+          ls "$tpl"
+
+      - name: Download OpenXR Vendors plugin
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release download "$VENDORS_TAG" --repo GodotVR/godot_openxr_vendors --pattern "*.zip" --dir "$RUNNER_TEMP/vendors"
+          ls -la "$RUNNER_TEMP/vendors"
+          for z in "$RUNNER_TEMP"/vendors/*.zip; do unzip -q -o "$z" -d "$RUNNER_TEMP/vendors_x"; done
+          src="$(find "$RUNNER_TEMP/vendors_x" -type d -path "*addons/godotopenxrvendors" | head -n 1)"
+          if [ -z "$src" ]; then
+            echo "addons/godotopenxrvendors not found in the release archive"
+            find "$RUNNER_TEMP/vendors_x" -maxdepth 3
+            exit 1
+          fi
+          mkdir -p game/addons
+          cp -r "$src" game/addons/
+          ls game/addons/godotopenxrvendors
+
+      - name: Restore debug keystore
+        uses: actions/cache@v4
+        with:
+          path: ~/keystore
+          key: debug-keystore-v1
+
+      - name: Create debug keystore if missing
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/keystore"
+          if [ ! -f "$HOME/keystore/debug.keystore" ]; then
+            keytool -genkeypair -keyalg RSA -keysize 2048 -alias androiddebugkey -keypass android -storepass android -keystore "$HOME/keystore/debug.keystore" -dname "CN=Android Debug,O=Android,C=US" -validity 9999 -storetype pkcs12
+          fi
+          echo "GODOT_ANDROID_KEYSTORE_DEBUG_PATH=$HOME/keystore/debug.keystore" >> "$GITHUB_ENV"
+
+      - name: Configure Godot editor settings
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.config/godot"
+          cat > "$HOME/.config/godot/editor_settings-${GODOT_SETTINGS_VERSION}.tres" <<EOF
+          [gd_resource type="EditorSettings" format=3]
+
+          [resource]
+          export/android/android_sdk_path = "${ANDROID_HOME}"
+          export/android/java_sdk_path = "${JAVA_HOME}"
+          export/android/debug_keystore = "${HOME}/keystore/debug.keystore"
+          export/android/debug_keystore_user = "androiddebugkey"
+          export/android/debug_keystore_pass = "android"
+          EOF
+          cat "$HOME/.config/godot/editor_settings-${GODOT_SETTINGS_VERSION}.tres"
+
+      - name: Install Android build template
+        run: |
+          set -euo pipefail
+          tpl="$HOME/.local/share/godot/export_templates/${GODOT_VERSION}.${GODOT_STATUS}"
+          mkdir -p game/android/build
+          unzip -q "$tpl/android_source.zip" -d game/android/build
+          chmod +x game/android/build/gradlew
+          touch game/android/build/.gdignore
+          echo "${GODOT_VERSION}.${GODOT_STATUS}" > game/android/.build_version
+
+      - name: Import project
+        run: |
+          mkdir -p build
+          timeout 900 godot --headless --path game --import 2>&1 | tee build/import.log || echo "import returned non-zero"
+          if grep -E "SCRIPT ERROR|Parse Error" build/import.log; then
+            echo "Script errors found during import"
+            exit 1
+          fi
+
+      - name: Smoke run (headless, no headset)
+        run: |
+          timeout 120 godot --headless --path game --quit-after 30 2>&1 | tee build/smoke.log || echo "smoke run returned non-zero"
+          if grep -E "SCRIPT ERROR|Parse Error" build/smoke.log; then
+            echo "Script errors found during smoke run"
+            exit 1
+          fi
+
+      - name: Export debug APK
+        run: |
+          set -euo pipefail
+          godot --headless --path game --export-debug "Quest" "$GITHUB_WORKSPACE/build/astro-planet-debug.apk" 2>&1 | tee build/export.log
+          ls -la build
+          test -s build/astro-planet-debug.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: astro-planet-debug-apk
+          path: build/astro-planet-debug.apk
+          if-no-files-found: error
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: build/*.log
+          if-no-files-found: ignore

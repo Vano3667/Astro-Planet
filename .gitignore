@@ -1,0 +1,17 @@
+# Godot: кэш редактора и шаблон сборки Android (создаются заново при сборке)
+game/.godot/
+game/android/
+
+# Плагин OpenXR Vendors скачивается при сборке, в репозитории не хранится
+game/addons/godotopenxrvendors/
+
+# Результаты сборки и ключи подписи
+build/
+*.apk
+*.aab
+*.keystore
+*.jks
+
+# Системный мусор
+Thumbs.db
+.DS_Store
