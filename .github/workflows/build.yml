@@ -157,6 +157,17 @@ jobs:
           timeout 600 xvfb-run -a -s "-screen 0 1280x1024x24" godot --xr-mode off --rendering-method gl_compatibility --rendering-driver opengl3 --audio-driver Dummy --resolution 1024x768 --path game --script res://tools/render_previews.gd > build/previews.log 2>&1
           tail -n 3 build/previews.log
 
+      # Pictures of the ground go into the same folder as the model sheets,
+      # so one small archive (model-sheets) has everything the agent needs to look at.
+      - name: Render terrain pictures (optional)
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          mkdir -p build/previews/sheets
+          export PREVIEW_DIR="$GITHUB_WORKSPACE/build/previews/sheets"
+          timeout 600 xvfb-run -a -s "-screen 0 1280x1024x24" godot --xr-mode off --rendering-method gl_compatibility --rendering-driver opengl3 --audio-driver Dummy --resolution 1024x768 --path game --script res://tools/render_terrain.gd > build/terrain_shots.log 2>&1
+          grep -E "TERRAIN_SHOT" build/terrain_shots.log || true
+
       - name: Upload model previews
         if: always()
         uses: actions/upload-artifact@v4
@@ -165,7 +176,8 @@ jobs:
           path: build/previews
           if-no-files-found: ignore
 
-      # Small artifact for sending to the agent in the chat: sheets of 16 models and showroom views.
+      # Small artifact for sending to the agent in the chat: sheets of 16 models,
+      # showroom views and pictures of the ground.
       - name: Upload model sheets
         if: always()
         uses: actions/upload-artifact@v4
@@ -200,7 +212,7 @@ jobs:
         if: always()
         run: |
           echo "=== SUMMARY ==="
-          grep -hE "MODELS_TOTAL| FAIL$|TERRAIN_|PREVIEWS_SAVED|SHEETS_SAVED|^\[main\]|SCRIPT ERROR|Parse Error" build/*.log | head -n 60 || true
+          grep -hE "MODELS_TOTAL| FAIL$|TERRAIN_|PREVIEWS_SAVED|SHEETS_SAVED|^\[main\]|SCRIPT ERROR|Parse Error" build/*.log | head -n 70 || true
           grep -hE -A 6 "SCRIPT ERROR|Parse Error" build/*.log | head -n 60 || true
           ls -la build/*.apk 2>/dev/null || echo "NO APK"
           echo "=== END SUMMARY ==="

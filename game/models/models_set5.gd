@@ -11,6 +11,8 @@ extends "res://models/models.gd"
 #   layout. The appearance description of the character is not collected yet
 #   (astro-planet-research, data/appearance/character.md); redo it when it arrives.
 # rock_large (seen: sheet 03, 2026-11-24): read as a ball with a slab stuck into it.
+# wind_turbine_medium, wind_turbine_large (seen: sheets 02 and 07, 2026-11-24):
+#   the blades were pale and thin, almost invisible against a light background.
 #
 # Written without running the engine; checked by tools/check_models.gd.
 
@@ -30,6 +32,10 @@ static func parts5(id: String) -> Array:
 			return _explorer5()
 		"rock_large":
 			return _rock_large5()
+		"wind_turbine_medium":
+			return _wind_turbine5(1.0)
+		"wind_turbine_large":
+			return _wind_turbine5(2.3)
 	return []
 
 
@@ -96,3 +102,23 @@ static func _rock_large5() -> Array:
 		cy(1.2, 0.6, -1.15, 0.30, -0.5, "gray_dark", 0.0, 15.0, 0.0, 0.6, 5),
 		sp(0.7, 0.3, 0.6, -0.2, 2.02, 0.1, "gray_light"),
 	]
+
+
+# Wind turbine: a white mast, a nacelle, an orange hub and three wide gray blades
+# that look to the front (-Z). s = 1 is the medium one (about 3.9 m tall), sizes are own values.
+static func _wind_turbine5(s: float) -> Array:
+	var hub_y: float = 2.58 * s
+	var a: Array = [
+		cy(0.55 * s, 0.08 * s, 0.0, 0.04 * s, 0.0, "gray_dark"),
+		cy(0.12 * s, 2.5 * s, 0.0, 1.29 * s, 0.0, "suit", 0.0, 0.0, 0.0, 0.07 * s),
+		cp(0.24 * s, 0.70 * s, 0.0, hub_y, 0.05 * s, "suit", 90.0),
+		sp(0.20 * s, 0.20 * s, 0.20 * s, 0.0, hub_y, -0.32 * s, "orange"),
+		bx(0.03 * s, 0.30 * s, 0.30 * s, 0.0, hub_y + 0.12 * s, 0.42 * s, "orange"),
+	]
+	var blade: float = 1.25 * s
+	var reach: float = 0.08 * s + blade * 0.5
+	for k in 3:
+		var deg: float = 120.0 * float(k)
+		var rad: float = deg_to_rad(deg)
+		a.append(bx(0.17 * s, blade, 0.035 * s, -sin(rad) * reach, hub_y + cos(rad) * reach, -0.34 * s, "suit_gray", 0.0, 0.0, deg))
+	return a
