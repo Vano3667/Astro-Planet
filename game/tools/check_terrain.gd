@@ -1,5 +1,6 @@
 extends SceneTree
-# Checks the ground code without a headset: builds chunks, digs, adds ground, queries heights.
+# Checks the ground code without a headset: builds chunks, digs, adds ground, levels it,
+# collects a resource, queries heights.
 # Prints timings (on the build server, not on the headset) and TERRAIN_OK or TERRAIN_FAIL.
 # Run: godot --headless --xr-mode off --path game --script res://tools/check_terrain.gd
 
@@ -27,18 +28,21 @@ func _init() -> void:
 	var total := 0
 	var meshed := 0
 	var tris := 0
+	var deposit_values := 0
 	for kz in range(-4, 5):
 		for ky in range(-2, 2):
 			for kx in range(-4, 5):
 				total += 1
 				var r: Dictionary = World.build_chunk_data(Vector3i(kx, ky, kz), PackedFloat32Array(), PackedFloat32Array())
 				var arrays: Array = r["arrays"]
+				var dep_list: PackedFloat32Array = r["deposits"]
+				deposit_values += dep_list.size()
 				if not arrays.is_empty():
 					meshed += 1
 					var v: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
 					tris += int(v.size() / 3.0)
 	var ms: float = float(Time.get_ticks_usec() - t0) / 1000.0
-	print("TERRAIN_BUILD chunks=%d meshed=%d tris=%d ms=%.1f ms_per_meshed=%.2f" % [total, meshed, tris, ms, ms / float(maxi(meshed, 1))])
+	print("TERRAIN_BUILD chunks=%d meshed=%d tris=%d ms=%.1f ms_per_meshed=%.2f deposit_refs=%d" % [total, meshed, tris, ms, ms / float(maxi(meshed, 1)), int(deposit_values / 5.0)])
 	_check("build", meshed >= 81 and tris > 20000, "meshed=%d tris=%d" % [meshed, tris])
 
 	# 2. Queries on the untouched ground.
@@ -56,19 +60,41 @@ func _init() -> void:
 	var t1: int = Time.get_ticks_usec()
 	var dug: int = w.edit_sphere(Vector3(0.3, 0.0, 0.2), 2.0, false)
 	var edit_ms: float = float(Time.get_ticks_usec() - t1) / 1000.0
+	var pit_soil: int = w.stat_removed_soil
 	var g1: float = w.ground_y(0.3, 0.2, 3.0)
-	_check("dig", dug >= 4 and absf(g1 + 2.0) < 0.35, "chunks=%d ground_y=%.3f edit_ms=%.2f" % [dug, g1, edit_ms])
+	_check("dig", dug >= 4 and absf(g1 + 2.0) < 0.35 and pit_soil > 50, "chunks=%d ground_y=%.3f soil_points=%d edit_ms=%.2f" % [dug, g1, pit_soil, edit_ms])
 	var piled: int = w.edit_sphere(Vector3(12.0, 0.0, 0.3), 2.0, true)
 	var g2: float = w.ground_y(12.0, 0.3, 5.0)
-	_check("fill", piled >= 1 and absf(g2 - 2.0) < 0.35, "chunks=%d ground_y=%.3f" % [piled, g2])
+	_check("fill", piled >= 1 and absf(g2 - 2.0) < 0.35 and w.stat_added > 50, "chunks=%d ground_y=%.3f added_points=%d" % [piled, g2, w.stat_added])
 
-	# 4. Rebuild the edited chunks and time it.
+	# 4. Resources: the deposit next to the start gives resin once; refilled ground gives none.
+	var dep: PackedFloat32Array = Gen.deposits_for(Vector3i(0, -1, -1))
+	_check("deposits", dep.size() >= 5, "values=%d" % dep.size())
+	var spot := Vector3(0.0, -0.2, -6.2)
+	w.edit_sphere(spot, 1.0, false)
+	var resin1: int = w.stat_removed_res[1]
+	var soil1: int = w.stat_removed_soil
+	w.edit_sphere(spot, 1.0, true)
+	var added: int = w.stat_added
+	w.edit_sphere(spot, 1.0, false)
+	var resin2: int = w.stat_removed_res[1]
+	var soil2: int = w.stat_removed_soil
+	_check("resource", resin1 >= 8 and resin2 == 0 and added > 0 and soil2 > 0, "resin1=%d soil1=%d added=%d resin2=%d soil2=%d" % [resin1, soil1, added, resin2, soil2])
+
+	# 5. Level a patch of hillside one meter above the old ground.
+	var target: float = far_h + 1.0
+	w.flatten_disc(Vector3(60.0, target, 45.0), 2.0)
+	var g3: float = w.ground_y(60.0, 45.0, target + 2.0)
+	var g4: float = w.ground_y(61.0, 45.5, target + 2.0)
+	_check("flatten", absf(g3 - target) < 0.2 and absf(g4 - target) < 0.2, "target=%.3f center=%.3f side=%.3f added=%d removed=%d" % [target, g3, g4, w.stat_added, w.stat_removed_soil])
+
+	# 6. Rebuild the edited chunks and time it.
 	var keys: Array = w.edited_keys()
 	var t2: int = Time.get_ticks_usec()
 	var edited_tris := 0
 	for item in keys:
 		var key: Vector3i = item
-		var r2: Dictionary = World.build_chunk_data(key, w.chunk_density(key), w.chunk_heights(key))
+		var r2: Dictionary = World.build_chunk_data(key, w.chunk_density(key), w.chunk_heights(key), w.chunk_mined(key))
 		var arrays2: Array = r2["arrays"]
 		if not arrays2.is_empty():
 			var v2: PackedVector3Array = arrays2[Mesh.ARRAY_VERTEX]
@@ -77,7 +103,7 @@ func _init() -> void:
 	print("TERRAIN_REMESH chunks=%d tris=%d ms=%.1f ms_per_chunk=%.2f" % [keys.size(), edited_tris, remesh_ms, remesh_ms / float(maxi(keys.size(), 1))])
 	_check("remesh", keys.size() >= 5 and edited_tris > 500, "chunks=%d tris=%d" % [keys.size(), edited_tris])
 
-	# 5. A long ray, as the aiming beam does every frame.
+	# 7. A long ray, as the aiming beam does every frame.
 	var t3: int = Time.get_ticks_usec()
 	for n in 100:
 		w.raycast(Vector3(3.0, 2.5, 3.0), Vector3(0.6, -0.1, 0.79).normalized(), 30.0)

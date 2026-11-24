@@ -2,11 +2,13 @@ extends Node3D
 # Third-person character on editable ground.
 # Left stick: the character walks relative to where the head looks, the camera rig follows.
 # Right stick left or right: the view turns in steps around the character.
-# Right trigger: dig. Right grip: add ground. A or X: hide and show the model showroom.
+# Right trigger: dig. Right grip: add ground. B: level the ground.
+# A or X: hide and show the model showroom.
 # Written without running the engine; see docs/STATUS.md.
 
 const Gallery := preload("res://gallery.gd")
 const Builder := preload("res://models/model_builder.gd")
+const Gen := preload("res://terrain/terrain_gen.gd")
 const VoxelWorld := preload("res://terrain/voxel_world.gd")
 const DigTool := preload("res://terrain/dig_tool.gd")
 const Scatter := preload("res://terrain/scatter.gd")
@@ -43,6 +45,8 @@ var _terrain: VoxelWorld
 var _tool: DigTool
 var _scatter: Scatter
 var _snap_ready: bool = true
+# Nuggets that fly from the dig spot to the character: {"node", "from", "t"}.
+var _flying: Array = []
 
 
 func _ready() -> void:
@@ -85,6 +89,7 @@ func _ready() -> void:
 	_tool.name = "DigTool"
 	add_child(_tool)
 	_tool.setup(right_hand, _terrain)
+	_tool.nugget_collected.connect(_on_nugget_collected)
 
 	_terrain.set_focus(_character.global_position)
 	_scatter.update(_character.global_position)
@@ -124,7 +129,7 @@ func _setup_hand(ctrl: XRController3D, is_left: bool) -> void:
 # The frame counter sits above the left controller instead of being glued to the head.
 func _setup_wrist_label() -> void:
 	fps_label.reparent(left_hand, false)
-	fps_label.position = Vector3(0.0, 0.07, 0.10)
+	fps_label.position = Vector3(0.0, 0.09, 0.10)
 	fps_label.rotation_degrees = Vector3(-50.0, 0.0, 0.0)
 	fps_label.pixel_size = 0.0006
 
@@ -132,6 +137,15 @@ func _setup_wrist_label() -> void:
 func _on_button_pressed(button: String) -> void:
 	if button == "ax_button":
 		_gallery.visible = not _gallery.visible
+
+
+# A nugget of the collected resource pops out of the ground and flies to the character.
+func _on_nugget_collected(type: int, at: Vector3) -> void:
+	var tint: Color = Gen.RES_COLORS[type - 1]
+	var node: Node3D = Builder.build("nugget", tint)
+	add_child(node)
+	node.global_position = at
+	_flying.append({"node": node, "from": at, "t": 0.0})
 
 
 func _process(delta: float) -> void:
@@ -143,13 +157,14 @@ func _process(delta: float) -> void:
 	_update_move(delta)
 	_update_ground(delta)
 	_update_snap_turn()
+	_update_flying(delta)
 
 
 func _update_fps(delta: float) -> void:
 	_fps_timer += delta
 	if _fps_timer >= 0.5:
 		_fps_timer = 0.0
-		fps_label.text = "%d fps  грунт: %d\nA / X: модели\nкурок: копать\nхват: насыпать" % [int(Engine.get_frames_per_second()), _terrain.pending_count()]
+		fps_label.text = "%d fps  очередь: %d\n%s\nкурок: копать, хват: насыпать\nB: ровнять, A / X: модели" % [int(Engine.get_frames_per_second()), _terrain.pending_count(), _tool.status_text()]
 
 
 func _update_move(delta: float) -> void:
@@ -211,3 +226,26 @@ func _update_snap_turn() -> void:
 		xr_origin.rotate_y(angle)
 	elif not _snap_ready and absf(x) < SNAP_RELEASE:
 		_snap_ready = true
+
+
+func _update_flying(delta: float) -> void:
+	if _flying.is_empty():
+		return
+	var target: Vector3 = _character.global_position + Vector3(0.0, 1.0, 0.0)
+	var i: int = _flying.size() - 1
+	while i >= 0:
+		var f: Dictionary = _flying[i]
+		var t: float = float(f["t"]) + delta * 1.6
+		var node: Node3D = f["node"]
+		if t >= 1.0:
+			node.queue_free()
+			_flying.remove_at(i)
+		else:
+			f["t"] = t
+			var from: Vector3 = f["from"]
+			var p: Vector3 = from.lerp(target, t)
+			p.y += sin(t * PI) * 1.2
+			node.global_position = p
+			var s: float = 1.6 - t
+			node.scale = Vector3(s, s, s)
+		i -= 1

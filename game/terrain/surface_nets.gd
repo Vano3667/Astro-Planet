@@ -1,7 +1,8 @@
 extends RefCounted
 # Turns the density values of one chunk into a triangle mesh (the "surface nets" method):
 # every cell that the surface passes through gets one point, neighbouring points are joined.
-# Triangles are flat shaded and colored by depth below the original ground.
+# Triangles are flat shaded and colored by depth below the original ground;
+# ground that belongs to a resource deposit gets the color of the resource.
 # Written without running the engine; checked by tools/check_terrain.gd in the GitHub build.
 
 const Gen := preload("res://terrain/terrain_gen.gd")
@@ -39,16 +40,19 @@ static func _winding() -> float:
 	return _wind
 
 
-# density: P*P*P values of one chunk, heights: P*P original ground heights,
-# origin_y: world height of the chunk origin. Returns mesh arrays in chunk-local
-# coordinates, or an empty array if the chunk has no surface.
-static func build(density: PackedFloat32Array, heights: PackedFloat32Array, origin_y: float) -> Array:
+# density: P*P*P values of one chunk; heights: P*P original ground heights;
+# origin: world position of the chunk; deposits: list from Gen.deposits_for();
+# mined: P*P*P flags of points whose ground was already dug out once (may be empty).
+# Returns mesh arrays in chunk-local coordinates, or an empty array if there is no surface.
+static func build(density: PackedFloat32Array, heights: PackedFloat32Array, origin: Vector3, deposits: PackedFloat32Array, mined: PackedByteArray) -> Array:
 	var pc: int = Gen.P
 	var pp: int = pc * pc
 	var cn: int = pc - 1
 	var cc: int = cn * cn
 	var voxel: float = Gen.VOXEL
 	var w: float = _winding()
+	var has_deposits: bool = deposits.size() >= 5
+	var has_mined: bool = mined.size() == pp * pc
 
 	var cell_vert := PackedVector3Array()
 	cell_vert.resize(cn * cc)
@@ -178,6 +182,7 @@ static func build(density: PackedFloat32Array, heights: PackedFloat32Array, orig
 	var verts := PackedVector3Array()
 	var normals := PackedVector3Array()
 	var colors := PackedColorArray()
+	var tri_count: int = 0
 	var q: int = 0
 	var q_count: int = quads.size()
 	while q < q_count:
@@ -213,10 +218,12 @@ static func build(density: PackedFloat32Array, heights: PackedFloat32Array, orig
 				var tmp: Vector3 = p1
 				p1 = p2
 				p2 = tmp
-			var cy: float = (p0.y + p1.y + p2.y) / 3.0 + origin_y
-			var cxi: int = clampi(roundi((p0.x + p1.x + p2.x) / (3.0 * voxel)) + 1, 0, pc - 1)
-			var czi: int = clampi(roundi((p0.z + p1.z + p2.z) / (3.0 * voxel)) + 1, 0, pc - 1)
-			var depth: float = heights[cxi + pc * czi] - cy
+			var mx: float = (p0.x + p1.x + p2.x) / 3.0
+			var my: float = (p0.y + p1.y + p2.y) / 3.0
+			var mz: float = (p0.z + p1.z + p2.z) / 3.0
+			var cxi: int = clampi(roundi(mx / voxel) + 1, 0, pc - 1)
+			var czi: int = clampi(roundi(mz / voxel) + 1, 0, pc - 1)
+			var depth: float = heights[cxi + pc * czi] - (my + origin.y)
 			var col: Color = COLOR_DEEP
 			if nn.y > 0.7 and depth < 0.4:
 				col = COLOR_GRASS
@@ -224,6 +231,23 @@ static func build(density: PackedFloat32Array, heights: PackedFloat32Array, orig
 				col = COLOR_SOIL
 			elif depth < 12.0:
 				col = COLOR_ROCK
+			if has_deposits and depth > -0.3:
+				# Look a little inside the ground, on the solid side of the surface.
+				var ix: float = mx - nn.x * 0.3
+				var iy: float = my - nn.y * 0.3
+				var iz: float = mz - nn.z * 0.3
+				var res: int = Gen.resource_at(deposits, ix + origin.x, iy + origin.y, iz + origin.z)
+				if res > 0 and has_mined:
+					var gi: int = clampi(roundi(ix / voxel) + 1, 0, pc - 1)
+					var gj: int = clampi(roundi(iy / voxel) + 1, 0, pc - 1)
+					var gk: int = clampi(roundi(iz / voxel) + 1, 0, pc - 1)
+					if mined[gi + pc * (gj + pc * gk)] != 0:
+						res = 0
+				if res > 0:
+					col = Gen.RES_COLORS[res - 1]
+					if tri_count % 2 == 1:
+						col = col.darkened(0.1)
+			tri_count += 1
 			verts.append(p0)
 			verts.append(p1)
 			verts.append(p2)
