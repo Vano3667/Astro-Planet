@@ -6,6 +6,9 @@ extends RefCounted
 # Set 5 only replaces existing models (fixes after looking at pictures): no catalog, no palette.
 # Set 6 holds the resource nuggets; the old one-shape "nugget" entries are left out of the
 # catalog (the model itself stays: main.gd may still build it).
+# SMOOTH_IDS: models of any set whose 12-sided cylinders are rebuilt with more sides
+# (seen on sheets 01, 02 and 05, 2026-11-24: small round bases looked faceted).
+# Set 5 does the same for its own list of models from sets 1 and 2 (with 20 sides).
 
 const Set2 := preload("res://models/models.gd")
 const Set3 := preload("res://models/models_set3.gd")
@@ -13,8 +16,18 @@ const Set4 := preload("res://models/models_set4.gd")
 const Set5 := preload("res://models/models_set5.gd")
 const Set6 := preload("res://models/models_set6.gd")
 
+const SMOOTH_IDS := ["tether_post", "beacon", "crystal", "solar_small", "solar_medium", "oxygen_portable", "power_extender", "floodlight", "sensor"]
+const SMOOTH_SIDES := 16
+
 
 static func get_parts(id: String) -> Array:
+	var p: Array = _find_parts(id)
+	if SMOOTH_IDS.has(id):
+		return _smooth(p)
+	return p
+
+
+static func _find_parts(id: String) -> Array:
 	var p: Array = Set5.parts5(id)
 	if not p.is_empty():
 		return p
@@ -28,6 +41,24 @@ static func get_parts(id: String) -> Array:
 	if not p.is_empty():
 		return p
 	return Set2.get_parts(id)
+
+
+# Copy of a part list in which every cylinder with exactly the default 12 sides (or a few
+# more) gets SMOOTH_SIDES sides. Cylinders with fewer sides are faceted on purpose.
+static func _smooth(src: Array) -> Array:
+	var out: Array = []
+	for item in src:
+		if typeof(item) != TYPE_DICTIONARY:
+			out.append(item)
+			continue
+		var part: Dictionary = item
+		if str(part.get("k", "")) == "cyl":
+			var seg: int = int(part.get("seg", 12))
+			if seg >= 12 and seg < SMOOTH_SIDES:
+				part = part.duplicate()
+				part["seg"] = SMOOTH_SIDES
+		out.append(part)
+	return out
 
 
 static func get_color(key: String) -> Color:
