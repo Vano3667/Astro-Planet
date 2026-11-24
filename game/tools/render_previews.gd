@@ -3,7 +3,7 @@ extends SceneTree
 # every model to .glb. Needs a real renderer (not --headless); the GitHub build
 # runs it under xvfb with software OpenGL. Output folder: env PREVIEW_DIR.
 
-const Library := preload("res://models/model_library.gd")
+const Models := preload("res://models/models.gd")
 const Builder := preload("res://models/model_builder.gd")
 const Gallery := preload("res://gallery.gd")
 
@@ -51,13 +51,14 @@ func _run() -> void:
 	var exported := 0
 	var index := 0
 	var view_dir := Vector3(-0.55, 0.45, -1.0).normalized()
-	for item in Library.CATALOG:
+	var catalog: Array = Models.get_catalog()
+	for item in catalog:
 		var entry: Dictionary = item
 		var id: String = str(entry["id"])
 		var tint: Color = Builder.DEFAULT_TINT
 		var file: String = "%02d_%s" % [index, id]
 		if entry.has("tint"):
-			tint = Library.tint(str(entry["tint"]))
+			tint = Models.get_tint(str(entry["tint"]))
 			file += "_" + str(entry["tint"])
 		index += 1
 

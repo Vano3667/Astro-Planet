@@ -1,16 +1,16 @@
 extends Node3D
-# Model showroom: every model from the library stands in rings around the player.
-# Ring 0 (small items) is on pedestals within reach, bigger things are farther away.
+# Model showroom: every model from the catalog stands in rings around the player.
+# Ring 0 (small items) is on pedestals, bigger things are farther away.
 # Written without running the engine; see docs/STATUS.md.
 
-const Library := preload("res://models/model_library.gd")
+const Models := preload("res://models/models.gd")
 const Builder := preload("res://models/model_builder.gd")
 
 const RINGS := [
-	{"radius": 1.3, "spacing": 0.45, "height": 0.9, "label_px": 0.0012, "offset": 0.0},
-	{"radius": 3.6, "spacing": 1.5, "height": 0.0, "label_px": 0.003, "offset": 0.0},
-	{"radius": 7.5, "spacing": 3.2, "height": 0.0, "label_px": 0.006, "offset": 0.5},
-	{"radius": 14.0, "spacing": 5.5, "height": 0.0, "label_px": 0.011, "offset": 0.0},
+	{"radius": 1.8, "spacing": 0.45, "height": 0.9, "label_px": 0.0015, "offset": 0.0},
+	{"radius": 5.0, "spacing": 1.4, "height": 0.0, "label_px": 0.004, "offset": 0.0},
+	{"radius": 9.0, "spacing": 3.2, "height": 0.0, "label_px": 0.007, "offset": 0.5},
+	{"radius": 16.0, "spacing": 5.5, "height": 0.0, "label_px": 0.012, "offset": 0.0},
 ]
 
 var _pedestal_mat: StandardMaterial3D
@@ -23,7 +23,7 @@ func _ready() -> void:
 	var by_ring: Array = []
 	for r in RINGS.size():
 		by_ring.append([])
-	for item in Library.CATALOG:
+	for item in Models.get_catalog():
 		var entry: Dictionary = item
 		var ring_index: int = clampi(int(entry["ring"]), 0, RINGS.size() - 1)
 		var bucket: Array = by_ring[ring_index]
@@ -36,7 +36,7 @@ func _ready() -> void:
 
 func _add_ground() -> void:
 	var plane := PlaneMesh.new()
-	plane.size = Vector2(44.0, 44.0)
+	plane.size = Vector2(48.0, 48.0)
 	var mat := StandardMaterial3D.new()
 	mat.albedo_color = Color(0.72, 0.62, 0.48)
 	plane.material = mat
@@ -74,7 +74,7 @@ func _place_ring(ring: Dictionary, entries: Array) -> void:
 		var id: String = str(entry["id"])
 		var tint: Color = Builder.DEFAULT_TINT
 		if entry.has("tint"):
-			tint = Library.tint(str(entry["tint"]))
+			tint = Models.get_tint(str(entry["tint"]))
 		var node: Node3D = Builder.build(id, tint)
 		var bottom := 0.0
 		var top := 1.0
