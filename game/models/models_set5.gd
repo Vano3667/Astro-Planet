@@ -13,6 +13,7 @@ extends "res://models/models.gd"
 # rock_large (seen: sheet 03, 2026-11-24): read as a ball with a slab stuck into it.
 # wind_turbine_medium, wind_turbine_large (seen: sheets 02 and 07, 2026-11-24):
 #   the blades were pale and thin, almost invisible against a light background.
+# storage_medium (seen: sheet 02, 2026-11-24): a wall with yellow squares instead of sockets.
 #
 # Written without running the engine; checked by tools/check_models.gd.
 
@@ -36,6 +37,8 @@ static func parts5(id: String) -> Array:
 			return _wind_turbine5(1.0)
 		"wind_turbine_large":
 			return _wind_turbine5(2.3)
+		"storage_medium":
+			return _storage_medium5()
 	return []
 
 
@@ -121,4 +124,22 @@ static func _wind_turbine5(s: float) -> Array:
 		var deg: float = 120.0 * float(k)
 		var rad: float = deg_to_rad(deg)
 		a.append(bx(0.17 * s, blade, 0.035 * s, -sin(rad) * reach, hub_y + cos(rad) * reach, -0.34 * s, "suit_gray", 0.0, 0.0, deg))
+	return a
+
+
+# Medium storage: an upright panel on a foot with eight small sockets in two rows
+# (eight small slots - from the wiki). The sockets look to the front (-Z).
+# Sizes are own values: sockets are 0.24 m apart, so that 0.22 m nuggets fit side by side.
+static func _storage_medium5() -> Array:
+	var a: Array = [
+		rb(0.60, 0.10, 0.36, 0.0, 0.05, 0.0, "gray_dark", 0.03),
+		rb(1.04, 0.66, 0.08, 0.0, 0.43, 0.06, "gray_light", 0.03),
+		bx(1.08, 0.05, 0.12, 0.0, 0.785, 0.06, "orange"),
+	]
+	for row in 2:
+		var y: float = 0.28 + 0.30 * float(row)
+		for col in 4:
+			var x: float = (float(col) - 1.5) * 0.24
+			a.append(cy(0.17, 0.010, x, y, 0.018, "suit_gray", 90.0, 0.0, 0.0, -1.0, 16))
+			a.append(cy(0.13, 0.012, x, y, 0.014, "slot", 90.0, 0.0, 0.0, -1.0, 16))
 	return a

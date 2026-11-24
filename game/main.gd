@@ -7,6 +7,7 @@ extends Node3D
 # Written without running the engine; see docs/STATUS.md.
 
 const Gallery := preload("res://gallery.gd")
+const Models := preload("res://models/index.gd")
 const Builder := preload("res://models/model_builder.gd")
 const Gen := preload("res://terrain/terrain_gen.gd")
 const VoxelWorld := preload("res://terrain/voxel_world.gd")
@@ -101,6 +102,7 @@ func _ready() -> void:
 	_far.update(_character.global_position)
 	_scatter.update(_character.global_position)
 	print("[main] ready: gallery nodes=%d props=%d terrain pending=%d" % [_gallery.get_child_count(), _scatter.prop_count, _terrain.pending_count()])
+	print("[main] nugget models: %s" % _nugget_report())
 
 	left_hand.button_pressed.connect(_on_button_pressed)
 	right_hand.button_pressed.connect(_on_button_pressed)
@@ -146,10 +148,33 @@ func _on_button_pressed(button: String) -> void:
 		_gallery.visible = not _gallery.visible
 
 
+# Model id of the nugget for a resource type (1-based, as in terrain_gen.gd).
+# Every resource has its own nugget in model set 6; the old common lump is the fallback.
+func _nugget_id(type: int) -> String:
+	var id: String = "nugget_" + str(Gen.RES_IDS[type - 1])
+	if Models.get_parts(id).is_empty():
+		return "nugget"
+	return id
+
+
+# Line for the build log: how many resources of the ground have their own nugget model.
+func _nugget_report() -> String:
+	var own: int = 0
+	var missing: String = ""
+	for i in Gen.RES_IDS.size():
+		if _nugget_id(i + 1) == "nugget":
+			missing += " " + str(Gen.RES_IDS[i])
+		else:
+			own += 1
+	if missing.is_empty():
+		missing = " none"
+	return "own=%d of %d, missing:%s" % [own, Gen.RES_IDS.size(), missing]
+
+
 # A nugget of the collected resource pops out of the ground and flies to the character.
 func _on_nugget_collected(type: int, at: Vector3) -> void:
 	var tint: Color = Gen.RES_COLORS[type - 1]
-	var node: Node3D = Builder.build("nugget", tint)
+	var node: Node3D = Builder.build(_nugget_id(type), tint)
 	add_child(node)
 	node.global_position = at
 	_flying.append({"node": node, "from": at, "t": 0.0})
