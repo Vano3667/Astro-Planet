@@ -9,6 +9,7 @@ const Gallery := preload("res://gallery.gd")
 const Builder := preload("res://models/model_builder.gd")
 const VoxelWorld := preload("res://terrain/voxel_world.gd")
 const DigTool := preload("res://terrain/dig_tool.gd")
+const Scatter := preload("res://terrain/scatter.gd")
 
 # Own values. The reference wiki has no numbers for walking speed.
 const WALK_SPEED := 3.0
@@ -35,10 +36,12 @@ const CAM_FOLLOW := 6.0
 
 var _xr_interface: XRInterface
 var _fps_timer: float = 0.0
+var _frame: int = 0
 var _gallery: Node3D
 var _character: Node3D
 var _terrain: VoxelWorld
 var _tool: DigTool
+var _scatter: Scatter
 var _snap_ready: bool = true
 
 
@@ -62,13 +65,16 @@ func _ready() -> void:
 	_terrain.name = "Terrain"
 	add_child(_terrain)
 
+	_scatter = Scatter.new()
+	_scatter.name = "Scatter"
+	add_child(_scatter)
+
 	_gallery = Gallery.new()
 	_gallery.name = "Gallery"
 	add_child(_gallery)
 	var gallery_ground := _gallery.get_node_or_null("GalleryGround") as Node3D
 	if gallery_ground != null:
 		gallery_ground.visible = false
-	print("[main] gallery nodes: ", _gallery.get_child_count())
 
 	_setup_character()
 	_setup_hand(left_hand, true)
@@ -81,6 +87,8 @@ func _ready() -> void:
 	_tool.setup(right_hand, _terrain)
 
 	_terrain.set_focus(_character.global_position)
+	_scatter.update(_character.global_position)
+	print("[main] ready: gallery nodes=%d props=%d terrain pending=%d" % [_gallery.get_child_count(), _scatter.prop_count, _terrain.pending_count()])
 
 	left_hand.button_pressed.connect(_on_button_pressed)
 	right_hand.button_pressed.connect(_on_button_pressed)
@@ -127,6 +135,10 @@ func _on_button_pressed(button: String) -> void:
 
 
 func _process(delta: float) -> void:
+	_frame += 1
+	if _frame == 100:
+		# One line for the build log: shows that the ground was built without a headset.
+		print("[main] frame 100: terrain built=%d pending=%d props=%d character_y=%.2f" % [_terrain.built_count, _terrain.pending_count(), _scatter.prop_count, _character.global_position.y])
 	_update_fps(delta)
 	_update_move(delta)
 	_update_ground(delta)
@@ -182,6 +194,7 @@ func _update_ground(delta: float) -> void:
 	rig.y = lerpf(rig.y, y + CAM_HEIGHT, clampf(CAM_FOLLOW * delta, 0.0, 1.0))
 	xr_origin.global_position = rig
 	_terrain.set_focus(pos)
+	_scatter.update(pos)
 
 
 func _update_snap_turn() -> void:
