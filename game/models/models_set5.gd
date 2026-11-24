@@ -14,6 +14,12 @@ extends "res://models/models.gd"
 # wind_turbine_medium, wind_turbine_large (seen: sheets 02 and 07, 2026-11-24):
 #   the blades were pale and thin, almost invisible against a light background.
 # storage_medium (seen: sheet 02, 2026-11-24): a wall with yellow squares instead of sockets.
+# printer_small, printer_medium (seen: sheet 02, 2026-11-24, second look): yellow squares on
+#   the base where the large printer has round sockets. The squares are turned into sockets;
+#   the rest of the model is taken from the older set unchanged.
+# SMOOTH_IDS (seen: sheets 01-03, 2026-11-24, second look): round details made of 12 sides
+#   looked faceted (tool nozzle, worklight head, landing pad, bases of canisters and so on).
+#   Their cylinders are rebuilt with 20 sides; nothing else changes.
 #
 # Written without running the engine; checked by tools/check_models.gd.
 
@@ -23,6 +29,10 @@ const EXPLORER_BODY_PARTS := 22
 
 # Sides of round details that are looked at from close up.
 const ROUND := 20
+
+# Models of sets 1 and 2 whose 12-sided cylinders are rebuilt with ROUND sides.
+# Models of sets 3 and 4 cannot be listed here: this file sees only sets 1 and 2.
+const SMOOTH_IDS := ["terrain_tool", "worklight", "landing_pad", "canister_small", "oxygen_source", "canister_medium", "rtg"]
 
 
 static func parts5(id: String) -> Array:
@@ -39,7 +49,56 @@ static func parts5(id: String) -> Array:
 			return _wind_turbine5(2.3)
 		"storage_medium":
 			return _storage_medium5()
+		"printer_small", "printer_medium":
+			return _smooth(_squares_to_sockets(get_parts(id)))
+	if SMOOTH_IDS.has(id):
+		return _smooth(get_parts(id))
 	return []
+
+
+# Copy of a part list in which every cylinder with 12 or more sides gets ROUND sides.
+# Cylinders with fewer sides are faceted on purpose (rocks, prisms) and stay as they are.
+# If the older set has no such model the list is empty and newer sets are asked instead.
+static func _smooth(src: Array) -> Array:
+	var out: Array = []
+	for item in src:
+		if typeof(item) != TYPE_DICTIONARY:
+			out.append(item)
+			continue
+		var part: Dictionary = item
+		if str(part.get("k", "")) == "cyl":
+			var seg: int = int(part.get("seg", 12))
+			if seg >= 12 and seg < ROUND:
+				part = part.duplicate()
+				part["seg"] = ROUND
+		out.append(part)
+	return out
+
+
+# Copy of a part list in which every flat yellow box (a slot drawn as a square) is replaced
+# by a round socket of the same place and size: a light rim and a dark middle.
+# A part that does not look like such a square is passed through unchanged.
+static func _squares_to_sockets(src: Array) -> Array:
+	var out: Array = []
+	for item in src:
+		if typeof(item) != TYPE_DICTIONARY:
+			out.append(item)
+			continue
+		var part: Dictionary = item
+		var color: String = str(part.get("c", ""))
+		var pv: Variant = part.get("p")
+		var sv: Variant = part.get("s")
+		var yellow: bool = color == "glow_yellow" or color == "yellow"
+		if yellow and typeof(pv) == TYPE_VECTOR3 and typeof(sv) == TYPE_VECTOR3 and str(part.get("k", "")) != "cyl":
+			var p: Vector3 = pv
+			var s: Vector3 = sv
+			var side: float = minf(s.x, s.z)
+			if s.y < side:
+				out.append(cy(side * 1.15, s.y, p.x, p.y, p.z, "suit_gray", 0.0, 0.0, 0.0, -1.0, 16))
+				out.append(cy(side * 0.9, s.y + 0.008, p.x, p.y, p.z, "slot", 0.0, 0.0, 0.0, -1.0, 16))
+				continue
+		out.append(part)
+	return out
 
 
 # Backpack body with its details. oy = height of the bottom, oz = center depth,
