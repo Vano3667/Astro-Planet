@@ -1,6 +1,7 @@
 extends Node3D
-# Model showroom: every model from the catalog stands in rings around the player.
+# Model showroom: every model from the catalog stands in rings around the start point.
 # Ring 0 (small items) is on pedestals, bigger things are farther away.
+# Labels are fixed in the world and face the center; they do not follow the head.
 # Written without running the engine; see docs/STATUS.md.
 
 const Models := preload("res://models/models.gd")
@@ -101,6 +102,7 @@ func _place_ring(ring: Dictionary, entries: Array) -> void:
 		label.pixel_size = label_px
 		label.font_size = 48
 		label.outline_size = 12
-		label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 		label.position = Vector3(px, base_y + (top - bottom) + 48.0 * label_px * 0.9, pz)
+		# The readable side of a label looks to its +Z; turn it to the center of the showroom.
+		label.rotation.y = -angle
 		add_child(label)
