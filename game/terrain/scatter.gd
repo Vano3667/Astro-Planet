@@ -8,7 +8,10 @@ extends Node3D
 # just a flat patch of paint on the ground.
 # On the gray mountain ground only rocks are placed. Seen on the picture terrain_7_mountain_near
 # (2026-11-24): trees and grass grew on bare rock and on the light summit.
-# A prop whose ground was dug away is removed (one column is looked at per frame).
+# A prop whose ground was dug away is removed. Deposit nuggets are looked at often (they stand
+# exactly where the player digs), other props one column per frame. Seen on the picture
+# terrain_5_dig of build 45452791194: nuggets hung in the air over a fresh pit, because one
+# column per frame was too slow.
 # Written without running the engine; see docs/STATUS.md.
 
 const Gen := preload("res://terrain/terrain_gen.gd")
@@ -30,6 +33,8 @@ const MARK_SMALL_LO := 1.3
 const MARK_SMALL_HI := 2.2
 # A prop is removed when there is no ground this deep under the place where it was put.
 const SETTLE_DEPTH := 0.3
+# How many deposit nuggets are checked per frame.
+const MARKS_PER_FRAME := 16
 # Name of the ground node next to this node in the scene (see main.gd).
 const WORLD_NODE := "Terrain"
 
@@ -64,12 +69,20 @@ var _focus := Vector2i(999999, 999999)
 var _total_weight: float = 0.0
 var _world: World
 var _settle_index: int = 0
+# Deposit nuggets that stand now (entries of removed columns are dropped on the next pass).
+var _marks: Array = []
+var _mark_index: int = 0
 
 
 func _init() -> void:
 	for item in KINDS:
 		var kind: Dictionary = item
 		_total_weight += float(kind["w"])
+
+
+# The ground whose digging removes props. If it is not set, the node is found by itself.
+func set_world(world: World) -> void:
+	_world = world
 
 
 func update(pos: Vector3) -> void:
@@ -91,27 +104,82 @@ func update(pos: Vector3) -> void:
 			_columns.erase(k)
 
 
-# Removes props whose ground was dug away. One column per frame, so the cost stays small.
+# Looks for the ground node next to this node: first by name, then by type.
+func _find_world() -> void:
+	var parent: Node = get_parent()
+	if parent == null:
+		return
+	_world = parent.get_node_or_null(WORLD_NODE) as World
+	if _world != null:
+		return
+	for child in parent.get_children():
+		var found := child as World
+		if found != null:
+			_world = found
+			return
+
+
+# Removes props whose ground was dug away.
 func _process(_delta: float) -> void:
 	if _columns.is_empty():
 		return
 	if _world == null:
-		var parent: Node = get_parent()
-		if parent == null:
-			return
-		_world = parent.get_node_or_null(WORLD_NODE) as World
+		_find_world()
 		if _world == null:
 			return
+	_settle_marks()
+	_settle_column()
+
+
+func _ground_gone(prop: Node3D) -> bool:
+	if not prop.has_meta("ground_y"):
+		return false
+	var ground: float = prop.get_meta("ground_y")
+	var under := Vector3(prop.position.x, ground - SETTLE_DEPTH, prop.position.z)
+	return _world.density_at(under) <= 0.0
+
+
+# Deposit nuggets: a few per frame, so that all of them are looked at within a few frames.
+func _settle_marks() -> void:
+	var steps: int = mini(MARKS_PER_FRAME, _marks.size())
+	for s in steps:
+		if _marks.is_empty():
+			return
+		if _mark_index >= _marks.size():
+			_mark_index = 0
+		var item: Variant = _marks[_mark_index]
+		if not is_instance_valid(item):
+			_marks.remove_at(_mark_index)
+			continue
+		var node := item as Node3D
+		if node == null:
+			_marks.remove_at(_mark_index)
+			continue
+		var holder: Node = node.get_parent()
+		if holder == null or holder.is_queued_for_deletion():
+			# The column was unloaded or the nugget was already removed: just forget it.
+			_marks.remove_at(_mark_index)
+			continue
+		if _ground_gone(node):
+			holder.remove_child(node)
+			node.queue_free()
+			prop_count -= 1
+			removed_count += 1
+			_marks.remove_at(_mark_index)
+			continue
+		_mark_index += 1
+
+
+# Plants, rocks and finds: one column per frame, so the cost stays small.
+func _settle_column() -> void:
 	var keys: Array = _columns.keys()
 	_settle_index = (_settle_index + 1) % keys.size()
 	var holder: Node3D = _columns[keys[_settle_index]]
 	for child in holder.get_children():
 		var prop := child as Node3D
-		if prop == null or not prop.has_meta("ground_y"):
+		if prop == null:
 			continue
-		var ground: float = prop.get_meta("ground_y")
-		var under := Vector3(prop.position.x, ground - SETTLE_DEPTH, prop.position.z)
-		if _world.density_at(under) <= 0.0:
+		if _ground_gone(prop):
 			holder.remove_child(prop)
 			prop.queue_free()
 			prop_count -= 1
@@ -223,6 +291,8 @@ func _mark_deposit(holder: Node3D, x: float, z: float, r: float, type: int) -> v
 			size = MARK_BIG
 		var px: float = x + cos(angle) * dist
 		var pz: float = z + sin(angle) * dist
-		_place(holder, Builder.build(id, tint), px, pz, Gen.height(px, pz), size, yaw, 0.04)
+		var node: Node3D = Builder.build(id, tint)
+		_place(holder, node, px, pz, Gen.height(px, pz), size, yaw, 0.04)
+		_marks.append(node)
 		mark_count += 1
 	marked_deposits += 1
