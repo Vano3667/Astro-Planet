@@ -12,10 +12,13 @@ extends "res://models/models.gd"
 # the proportions are own; such models are marked "own proportions" below.
 # A comment like "nature.md: flora 4" is the number of the entry in that section of the file.
 #
-# The models stand only in the showroom (CATALOG7). They are not placed on the ground by
-# terrain/scatter.gd and have no behaviour.
-# Written without running the engine. The agent has not seen a picture of any model of this
-# set yet; see docs/REVIEW.md for what the agent has really seen.
+# All models stand in the showroom (CATALOG7). Two of them are also placed on the ground by
+# terrain/scatter.gd: tier_fir on the hills and bounce_knot on mountain rock. No behaviour.
+# Written without running the engine.
+# SEEN BY THE AGENT: all 22 models on the sheet of build 45483936141 (2026-11-24). Captions
+# match, every model has the parts listed below, sticks and leaves lean the way this file
+# says. Whether they look like the reference cannot be told: the agent has no pictures of
+# the reference, only the word descriptions. See docs/REVIEW.md.
 
 const PALETTE7 := {
 	"n_lilac": Color(0.94, 0.85, 0.94),
@@ -71,10 +74,13 @@ const PALETTE7 := {
 
 # Titles are own names. Ring 0 - on pedestals, rings 1 to 3 - on the ground, bigger farther.
 # New entries go to the end, so the numbers of the earlier ones on the sheets do not move.
+# The three research finds stood on pedestals (ring 0). Seen on the showroom pictures of
+# build 45483936141: they are 0.5-0.6 m wide, the pedestals stand 0.45 m apart, so the
+# three ran into each other and into their neighbours. They stand on the ground now.
 const CATALOG7 := [
-	{"id": "research_rock", "title": "Образец: минерал", "ring": 0},
-	{"id": "research_lump", "title": "Образец: органика", "ring": 0},
-	{"id": "research_device", "title": "Образец: прибор", "ring": 0},
+	{"id": "research_rock", "title": "Образец: минерал", "ring": 1},
+	{"id": "research_lump", "title": "Образец: органика", "ring": 1},
+	{"id": "research_device", "title": "Образец: прибор", "ring": 1},
 	{"id": "pop_bulb", "title": "Хлопушка", "ring": 1},
 	{"id": "spike_cap", "title": "Шипогриб", "ring": 1},
 	{"id": "puff_ball", "title": "Пыхтун", "ring": 1},
@@ -158,8 +164,10 @@ static func _dir7(tilt: float, yaw: float) -> Vector3:
 
 # A cylinder or cone that starts at a point and goes away in the direction (tilt, yaw).
 # d is the diameter at the start, d_top at the far end (-1 = the same, 0 = a sharp tip).
-# Assumes that the model builder turns a part around X first and then around Y; if sticks
-# lean the wrong way on a picture, this is the place to look.
+# Relies on the model builder turning a part around X first and then around Y.
+# Seen on the sheet of build 45483936141: sticks lean where they should (the neck of
+# spit_bulb goes to the front, the star of dome_shooter and the ground vines of whip_stalk
+# spread evenly around).
 static func _stick7(d: float, h: float, from: Vector3, c: String, tilt: float, yaw: float, d_top: float = -1.0, seg: int = 8) -> Dictionary:
 	var mid: Vector3 = from + _dir7(tilt, yaw) * (h * 0.5)
 	return cy(d, h, mid.x, mid.y, mid.z, c, tilt, yaw, 0.0, d_top, seg)
@@ -476,7 +484,7 @@ static func _barrel_pod7() -> Array:
 
 # nature.md: tappable plant 4. A very tall thin tree: a pale blue trunk with a few turquoise
 # leaves and a "tail" on top. Width to height 0.19 as measured: about 1.6 m wide and
-# 7.9 m tall (own size).
+# 7.9 m tall (own size). On the sheet it is hard to see: thin and pale on a pale background.
 static func _mast_tree7() -> Array:
 	var a: Array = [
 		cy(0.60, 0.20, 0.0, 0.10, 0.0, "n_paleblue", 0.0, 0.0, 0.0, 0.36, 8),

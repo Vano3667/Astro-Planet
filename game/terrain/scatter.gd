@@ -8,6 +8,10 @@ extends Node3D
 # just a flat patch of paint on the ground.
 # On the gray mountain ground only rocks are placed. Seen on the picture terrain_7_mountain_near
 # (2026-11-24): trees and grass grew on bare rock and on the light summit.
+# One exception since session 23: the plant bounce_knot grows only on that gray ground, and
+# rarely. The appearance notes (astro-planet-research, nature.md) say that on the starting
+# planet it grows in the mountains and the tiered fir grows in the forests; so tier_fir of
+# model set 7 replaced the purple conifer tree_spire of set 3 here.
 # A prop whose ground was dug away is removed. Deposit nuggets are looked at often (they stand
 # exactly where the player digs), other props one column per frame. Seen on the picture
 # terrain_5_dig of build 45452791194: nuggets hung in the air over a fresh pit, because one
@@ -38,7 +42,9 @@ const MARKS_PER_FRAME := 16
 # Name of the ground node next to this node in the scene (see main.gd).
 const WORLD_NODE := "Terrain"
 
-# id: model, w: how often it appears, lo / hi: size range, rock: may stand on mountain rock
+# id: model, w: how often it appears, lo / hi: size range, rock: may stand on mountain rock,
+# high: stands only on mountain rock (on lower ground its place stays empty).
+# Weights and sizes are own values. tier_fir is 6.3 m tall at size 1.
 const KINDS := [
 	{"id": "grass_tuft", "w": 6.0, "lo": 0.9, "hi": 1.8},
 	{"id": "bush", "w": 2.0, "lo": 0.8, "hi": 1.5},
@@ -49,11 +55,12 @@ const KINDS := [
 	{"id": "rock_small", "w": 2.0, "lo": 0.7, "hi": 1.8, "rock": true},
 	{"id": "rock_large", "w": 0.6, "lo": 0.7, "hi": 1.3, "rock": true},
 	{"id": "boulder_cluster", "w": 0.5, "lo": 0.7, "hi": 1.4, "rock": true},
-	{"id": "tree_puff", "w": 1.2, "lo": 0.8, "hi": 1.5},
-	{"id": "tree_spire", "w": 0.8, "lo": 0.8, "hi": 1.4},
+	{"id": "tree_puff", "w": 0.6, "lo": 0.8, "hi": 1.5},
+	{"id": "tier_fir", "w": 1.4, "lo": 0.55, "hi": 1.0},
 	{"id": "mushroom_tree", "w": 0.4, "lo": 0.7, "hi": 1.2},
 	{"id": "research_pod", "w": 0.15, "lo": 0.9, "hi": 1.1, "rock": true},
 	{"id": "wreck_panel", "w": 0.1, "lo": 0.9, "hi": 1.3, "rock": true},
+	{"id": "bounce_knot", "w": 0.5, "lo": 0.8, "hi": 1.3, "rock": true, "high": true},
 ]
 
 # Everything that stands on the ground now: plants, rocks, finds and deposit nuggets.
@@ -230,6 +237,9 @@ func _make_column(k: Vector2i) -> Node3D:
 			continue
 		var ground: float = Gen.height(x, z)
 		var id: String = str(kind["id"])
+		if bool(kind.get("high", false)) and ground <= HIGH_LEVEL:
+			# A mountain plant on low ground: the place stays empty.
+			continue
 		if ground > HIGH_LEVEL and not bool(kind.get("rock", false)):
 			# Bare rock: no plants. Some of the places get a stone, the rest stay empty.
 			if swap >= ROCK_SWAP:

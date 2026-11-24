@@ -12,6 +12,7 @@ extends SceneTree
 # Needs a real renderer (not --headless); the GitHub build runs it under xvfb.
 # Output folder: env PREVIEW_DIR. Lines for the build log start with TERRAIN_SHOT.
 # The light here is set by this script: only its direction is the same as in the game.
+# The build glues these pictures into one sheet (tools/make_sheet.gd).
 # Written without running the engine.
 
 const Gen := preload("res://terrain/terrain_gen.gd")
@@ -25,6 +26,8 @@ const Builder := preload("res://models/model_builder.gd")
 # The character stands here at the start of the game (see main.gd).
 const START := Vector3(0.0, 0.0, -3.0)
 const MAX_WAIT_FRAMES := 2500
+# The caption size was chosen for a 1024 x 768 picture; it grows with the picture.
+const BASE_H := 768.0
 
 var _terrain: VoxelWorld
 var _far: FarTerrain
@@ -66,6 +69,9 @@ func _run() -> void:
 	_cam.fov = 70.0
 	_cam.far = 900.0
 
+	# Dark text with a light outline: readable on the sky and in the cave.
+	# Seen on the pictures of builds 45463833312 and 45483936141: plain dark text of
+	# terrain_6_cave was lost on the dark picture.
 	var layer := CanvasLayer.new()
 	root.add_child(layer)
 	_caption = Label.new()
@@ -73,6 +79,8 @@ func _run() -> void:
 	_caption.position = Vector2(24.0, 14.0)
 	_caption.add_theme_font_size_override("font_size", 40)
 	_caption.add_theme_color_override("font_color", Color(0.08, 0.09, 0.12))
+	_caption.add_theme_color_override("font_outline_color", Color(1.0, 1.0, 1.0))
+	_caption.add_theme_constant_override("outline_size", 10)
 
 	_terrain = VoxelWorld.new()
 	root.add_child(_terrain)
@@ -84,6 +92,12 @@ func _run() -> void:
 	_focus(START)
 	var frames: int = await _wait_ground()
 	print("TERRAIN_SHOT loaded frames=%d built=%d pending=%d far_tris=%d props=%d" % [frames, _terrain.built_count, _terrain.pending_count(), _far.tri_count, _scatter.prop_count])
+
+	# The window has its real size only after the first frames.
+	var k: float = maxf(float(root.size.y) / BASE_H, 0.5)
+	_caption.position = Vector2(24.0, 14.0) * k
+	_caption.add_theme_font_size_override("font_size", int(round(40.0 * k)))
+	_caption.add_theme_constant_override("outline_size", int(round(10.0 * k)))
 
 	var ground: float = _terrain.ground_y(START.x, START.z, 2.0)
 	var hero: Node3D = Builder.build("explorer")
@@ -158,8 +172,8 @@ func _run() -> void:
 		frames = await _wait_ground()
 		var best_dir := Vector3(0.0, 0.0, -1.0)
 		var best_len: float = 0.0
-		for k in 12:
-			var ang: float = TAU * float(k) / 12.0
+		for n in 12:
+			var ang: float = TAU * float(n) / 12.0
 			var dir := Vector3(sin(ang), 0.0, cos(ang))
 			var hit: Dictionary = _terrain.raycast(cave, dir, 60.0)
 			var hit_pos: Vector3 = hit["position"]
