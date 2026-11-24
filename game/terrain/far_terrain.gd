@@ -103,15 +103,19 @@ static func build_arrays(focus: Vector2i, winding: float) -> Array:
 	var x0: int = focus.x - RADIUS
 	var z0: int = focus.y - RADIUS
 
-	# Ground height at every corner of the cell grid.
+	# Ground height at every corner of the cell grid: true is the real height (used for
+	# the color), heights has the rim of the hole lowered (used for the shape).
 	var heights := PackedFloat32Array()
+	var true_h := PackedFloat32Array()
 	heights.resize(vs * vs)
+	true_h.resize(vs * vs)
 	for vz in vs:
 		var gz: int = z0 + vz
 		var rim_z: bool = gz >= focus.y - HOLE and gz <= focus.y + HOLE + 1
 		for vx in vs:
 			var gx: int = x0 + vx
 			var h: float = Gen.height(float(gx) * CELL, float(gz) * CELL)
+			true_h[vx + vs * vz] = h
 			if rim_z and gx >= focus.x - HOLE and gx <= focus.x + HOLE + 1:
 				h -= DROP
 			heights[vx + vs * vz] = h
@@ -141,6 +145,8 @@ static func build_arrays(focus: Vector2i, winding: float) -> Array:
 			var b := Vector3(wx + CELL, heights[i00 + 1], wz)
 			var c := Vector3(wx + CELL, heights[i00 + vs + 1], wz + CELL)
 			var d := Vector3(wx, heights[i00 + vs], wz + CELL)
+			# Height of the middle of the cell on the real ground.
+			var mid_h: float = (true_h[i00] + true_h[i00 + 1] + true_h[i00 + vs + 1] + true_h[i00 + vs]) * 0.25
 			for t in 2:
 				var p0: Vector3 = a
 				var p1: Vector3 = b
@@ -157,9 +163,7 @@ static func build_arrays(focus: Vector2i, winding: float) -> Array:
 					var tmp: Vector3 = p1
 					p1 = p2
 					p2 = tmp
-				var col: Color = Nets.COLOR_GRASS
-				if nn.y <= 0.7:
-					col = Nets.COLOR_SOIL
+				var col: Color = Nets.surface_color(mid_h, nn.y)
 				verts[n] = p0
 				verts[n + 1] = p1
 				verts[n + 2] = p2

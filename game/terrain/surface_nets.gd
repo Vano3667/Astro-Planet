@@ -1,7 +1,7 @@
 extends RefCounted
 # Turns the density values of one chunk into a triangle mesh (the "surface nets" method):
 # every cell that the surface passes through gets one point, neighbouring points are joined.
-# Triangles are flat shaded and colored by depth below the original ground;
+# Triangles are flat shaded and colored by depth below the original ground and by height;
 # ground that belongs to a resource deposit gets the color of the resource.
 # Written without running the engine; checked by tools/check_terrain.gd in the GitHub build.
 
@@ -11,6 +11,12 @@ const COLOR_GRASS := Color(0.45, 0.66, 0.38)
 const COLOR_SOIL := Color(0.58, 0.42, 0.29)
 const COLOR_ROCK := Color(0.43, 0.41, 0.46)
 const COLOR_DEEP := Color(0.27, 0.25, 0.31)
+# Mountains: the reference wiki calls the mountains of the starting planet gray.
+# The light tops and both height levels are own values.
+const COLOR_HIGH := Color(0.52, 0.53, 0.52)
+const COLOR_SNOW := Color(0.88, 0.90, 0.93)
+const HIGH_LEVEL := 7.0
+const SNOW_LEVEL := 18.0
 
 static var _wind: float = 0.0
 
@@ -38,6 +44,20 @@ static func _winding() -> float:
 			sign_value = -1.0
 	_wind = sign_value
 	return _wind
+
+
+# Color of the ground surface. wy: height of the place, ny: how much the surface looks up (0..1).
+# Used both for the detailed ground and for the far ground, so the two match.
+static func surface_color(wy: float, ny: float) -> Color:
+	if ny > 0.7:
+		if wy > SNOW_LEVEL:
+			return COLOR_SNOW
+		if wy > HIGH_LEVEL:
+			return COLOR_HIGH
+		return COLOR_GRASS
+	if wy > HIGH_LEVEL:
+		return COLOR_ROCK
+	return COLOR_SOIL
 
 
 # density: P*P*P values of one chunk; heights: P*P original ground heights;
@@ -223,12 +243,15 @@ static func build(density: PackedFloat32Array, heights: PackedFloat32Array, orig
 			var mz: float = (p0.z + p1.z + p2.z) / 3.0
 			var cxi: int = clampi(roundi(mx / voxel) + 1, 0, pc - 1)
 			var czi: int = clampi(roundi(mz / voxel) + 1, 0, pc - 1)
-			var depth: float = heights[cxi + pc * czi] - (my + origin.y)
+			var wy: float = my + origin.y
+			var depth: float = heights[cxi + pc * czi] - wy
 			var col: Color = COLOR_DEEP
-			if nn.y > 0.7 and depth < 0.4:
-				col = COLOR_GRASS
+			if depth < 0.4:
+				col = surface_color(wy, nn.y)
 			elif depth < 3.5:
 				col = COLOR_SOIL
+				if wy > HIGH_LEVEL:
+					col = COLOR_ROCK
 			elif depth < 12.0:
 				col = COLOR_ROCK
 			if has_deposits and depth > -0.3:
