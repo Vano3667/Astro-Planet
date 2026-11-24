@@ -10,6 +10,7 @@ const Gallery := preload("res://gallery.gd")
 const Builder := preload("res://models/model_builder.gd")
 const Gen := preload("res://terrain/terrain_gen.gd")
 const VoxelWorld := preload("res://terrain/voxel_world.gd")
+const FarTerrain := preload("res://terrain/far_terrain.gd")
 const DigTool := preload("res://terrain/dig_tool.gd")
 const Scatter := preload("res://terrain/scatter.gd")
 
@@ -42,6 +43,7 @@ var _frame: int = 0
 var _gallery: Node3D
 var _character: Node3D
 var _terrain: VoxelWorld
+var _far: FarTerrain
 var _tool: DigTool
 var _scatter: Scatter
 var _snap_ready: bool = true
@@ -69,6 +71,10 @@ func _ready() -> void:
 	_terrain.name = "Terrain"
 	add_child(_terrain)
 
+	_far = FarTerrain.new()
+	_far.name = "FarTerrain"
+	add_child(_far)
+
 	_scatter = Scatter.new()
 	_scatter.name = "Scatter"
 	add_child(_scatter)
@@ -92,6 +98,7 @@ func _ready() -> void:
 	_tool.nugget_collected.connect(_on_nugget_collected)
 
 	_terrain.set_focus(_character.global_position)
+	_far.update(_character.global_position)
 	_scatter.update(_character.global_position)
 	print("[main] ready: gallery nodes=%d props=%d terrain pending=%d" % [_gallery.get_child_count(), _scatter.prop_count, _terrain.pending_count()])
 
@@ -151,8 +158,10 @@ func _on_nugget_collected(type: int, at: Vector3) -> void:
 func _process(delta: float) -> void:
 	_frame += 1
 	if _frame == 100:
-		# One line for the build log: shows that the ground was built without a headset.
+		# Lines for the build log: show that the ground was built without a headset.
 		print("[main] frame 100: terrain built=%d pending=%d props=%d character_y=%.2f" % [_terrain.built_count, _terrain.pending_count(), _scatter.prop_count, _character.global_position.y])
+	if _frame == 115:
+		print("[main] frame 115: far ground tris=%d build_ms=%.1f builds=%d" % [_far.tri_count, _far.build_ms, _far.build_count])
 	_update_fps(delta)
 	_update_move(delta)
 	_update_ground(delta)
@@ -209,6 +218,7 @@ func _update_ground(delta: float) -> void:
 	rig.y = lerpf(rig.y, y + CAM_HEIGHT, clampf(CAM_FOLLOW * delta, 0.0, 1.0))
 	xr_origin.global_position = rig
 	_terrain.set_focus(pos)
+	_far.update(pos)
 	_scatter.update(pos)
 
 
