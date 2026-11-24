@@ -20,6 +20,8 @@ static func get_parts(id: String) -> Array:
 
 
 static func get_color(key: String) -> Color:
+	if Set4.PALETTE4.has(key):
+		return Set4.PALETTE4[key]
 	if Set3.PALETTE3.has(key):
 		return Set3.PALETTE3[key]
 	return Set2.get_color(key)
