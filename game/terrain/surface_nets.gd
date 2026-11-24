@@ -18,6 +18,10 @@ const COLOR_SNOW := Color(0.88, 0.90, 0.93)
 const HIGH_LEVEL := 7.0
 const SNOW_LEVEL := 18.0
 const COLOR_BAND := 1.5     # two ground colors mix within this many meters above and below a level
+# Bare soil (or bare rock high up) shows only on cliffs: where the surface looks up less than
+# this (0.45 is a slope of about 63 degrees). Seen on the pictures of build 45452791194: with
+# the limit at 0.7 ordinary steep grass slopes got muddy brown-olive smears.
+const CLIFF_NY := 0.45
 
 static var _wind: float = 0.0
 
@@ -49,15 +53,17 @@ static func _winding() -> float:
 
 # Color of the ground surface. wy: height of the place, ny: how much the surface looks up (0..1).
 # Used both for the detailed ground and for the far ground, so the two match.
-# Colors change gradually with height and with steepness, so the borders are not saw-toothed.
+# Colors change gradually with height, so the borders are not saw-toothed.
 static func surface_color(wy: float, ny: float) -> Color:
 	var high: float = smoothstep(HIGH_LEVEL - COLOR_BAND, HIGH_LEVEL + COLOR_BAND, wy)
 	var level: Color = COLOR_GRASS.lerp(COLOR_HIGH, high)
 	var snow: float = smoothstep(SNOW_LEVEL - COLOR_BAND, SNOW_LEVEL + COLOR_BAND, wy)
 	if snow > 0.0:
 		level = level.lerp(COLOR_SNOW, snow)
-	var steep: Color = COLOR_SOIL.lerp(COLOR_ROCK, high)
-	return steep.lerp(level, smoothstep(0.6, 0.8, ny))
+	if ny >= CLIFF_NY + 0.1:
+		return level
+	var cliff: Color = COLOR_SOIL.lerp(COLOR_ROCK, high)
+	return cliff.lerp(level, smoothstep(CLIFF_NY - 0.1, CLIFF_NY + 0.1, ny))
 
 
 # density: P*P*P values of one chunk; heights: P*P original ground heights;
