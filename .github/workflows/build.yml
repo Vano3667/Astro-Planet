@@ -117,20 +117,29 @@ jobs:
             exit 1
           fi
 
-      - name: Smoke run (headless, no headset)
-        run: |
-          timeout 120 godot --headless --path game --quit-after 30 2>&1 | tee build/smoke.log || echo "smoke run returned non-zero"
-          if grep -E "SCRIPT ERROR|Parse Error" build/smoke.log; then
-            echo "Script errors found during smoke run"
-            exit 1
-          fi
-
       - name: Check models
         run: |
           set -euo pipefail
           timeout 300 godot --headless --xr-mode off --path game --script res://tools/check_models.gd 2>&1 | tee build/models.log
           if grep -E "SCRIPT ERROR|Parse Error" build/models.log; then
             echo "Script errors found during model check"
+            exit 1
+          fi
+
+      - name: Check terrain
+        run: |
+          set -euo pipefail
+          timeout 300 godot --headless --xr-mode off --path game --script res://tools/check_terrain.gd 2>&1 | tee build/terrain.log
+          if grep -E "SCRIPT ERROR|Parse Error|TERRAIN_FAIL" build/terrain.log; then
+            echo "Terrain check failed"
+            exit 1
+          fi
+
+      - name: Smoke run (headless, no headset)
+        run: |
+          timeout 120 godot --headless --path game --quit-after 120 2>&1 | tee build/smoke.log || echo "smoke run returned non-zero"
+          if grep -E "SCRIPT ERROR|Parse Error" build/smoke.log; then
+            echo "Script errors found during smoke run"
             exit 1
           fi
 
