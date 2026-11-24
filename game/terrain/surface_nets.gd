@@ -12,11 +12,12 @@ const COLOR_SOIL := Color(0.58, 0.42, 0.29)
 const COLOR_ROCK := Color(0.43, 0.41, 0.46)
 const COLOR_DEEP := Color(0.27, 0.25, 0.31)
 # Mountains: the reference wiki calls the mountains of the starting planet gray.
-# The light tops and both height levels are own values.
+# The light tops, both height levels and the width of the color bands are own values.
 const COLOR_HIGH := Color(0.52, 0.53, 0.52)
 const COLOR_SNOW := Color(0.88, 0.90, 0.93)
 const HIGH_LEVEL := 7.0
 const SNOW_LEVEL := 18.0
+const COLOR_BAND := 1.5     # two ground colors mix within this many meters above and below a level
 
 static var _wind: float = 0.0
 
@@ -48,23 +49,24 @@ static func _winding() -> float:
 
 # Color of the ground surface. wy: height of the place, ny: how much the surface looks up (0..1).
 # Used both for the detailed ground and for the far ground, so the two match.
+# Colors change gradually with height and with steepness, so the borders are not saw-toothed.
 static func surface_color(wy: float, ny: float) -> Color:
-	if ny > 0.7:
-		if wy > SNOW_LEVEL:
-			return COLOR_SNOW
-		if wy > HIGH_LEVEL:
-			return COLOR_HIGH
-		return COLOR_GRASS
-	if wy > HIGH_LEVEL:
-		return COLOR_ROCK
-	return COLOR_SOIL
+	var high: float = smoothstep(HIGH_LEVEL - COLOR_BAND, HIGH_LEVEL + COLOR_BAND, wy)
+	var level: Color = COLOR_GRASS.lerp(COLOR_HIGH, high)
+	var snow: float = smoothstep(SNOW_LEVEL - COLOR_BAND, SNOW_LEVEL + COLOR_BAND, wy)
+	if snow > 0.0:
+		level = level.lerp(COLOR_SNOW, snow)
+	var steep: Color = COLOR_SOIL.lerp(COLOR_ROCK, high)
+	return steep.lerp(level, smoothstep(0.6, 0.8, ny))
 
 
 # density: P*P*P values of one chunk; heights: P*P original ground heights;
 # origin: world position of the chunk; deposits: list from Gen.deposits_for();
 # mined: P*P*P flags of points whose ground was already dug out once (may be empty).
+# by_shape: only for tools/check_terrain.gd - picks the side of every triangle the old, wrong way,
+# so that the build can show the difference. The game never passes it.
 # Returns mesh arrays in chunk-local coordinates, or an empty array if there is no surface.
-static func build(density: PackedFloat32Array, heights: PackedFloat32Array, origin: Vector3, deposits: PackedFloat32Array, mined: PackedByteArray) -> Array:
+static func build(density: PackedFloat32Array, heights: PackedFloat32Array, origin: Vector3, deposits: PackedFloat32Array, mined: PackedByteArray, by_shape: bool = false) -> Array:
 	var pc: int = Gen.P
 	var pp: int = pc * pc
 	var cn: int = pc - 1
@@ -167,6 +169,10 @@ static func build(density: PackedFloat32Array, heights: PackedFloat32Array, orig
 	# Pass 2: a quad for every grid edge crossed by the surface. A chunk owns the edges
 	# that start at its grid points 0 .. N-1, so neighbours never repeat a quad.
 	# Each quad is stored as 4 cell indices and a code: axis * 2 + (0 if the solid end is first).
+	# The four cells always go around the edge in the same order:
+	#   X edge: (y-, z-), (y+, z-), (y+, z+), (y-, z+)   - seen from +X this is counter-clockwise
+	#   Y edge: (x-, z-), (x+, z-), (x+, z+), (x-, z+)   - seen from +Y this is clockwise
+	#   Z edge: (x-, y-), (x+, y-), (x+, y+), (x-, y+)   - seen from +Z this is counter-clockwise
 	var quads := PackedInt32Array()
 	for k in range(1, pc - 1):
 		for j in range(1, pc - 1):
@@ -212,29 +218,53 @@ static func build(density: PackedFloat32Array, heights: PackedFloat32Array, orig
 		var vd: Vector3 = cell_vert[quads[q + 3]]
 		var code: int = quads[q + 4]
 		q += 5
-		# direction from ground to air along the crossed edge
-		var outward := Vector3.ZERO
 		var axis: int = code >> 1
-		if (code & 1) == 0:
-			outward[axis] = 1.0
-		else:
-			outward[axis] = -1.0
+		# Which side of the quad looks from the ground into the air follows from the order of
+		# its corners around the crossed edge (see pass 2) and from which end of the edge is
+		# solid. It must NOT be judged from the tilt of each triangle: a triangle that lies
+		# almost along the edge would get a random side, and the ground would show holes.
+		var orient: float = 1.0
+		if axis == 1:
+			orient = -1.0
+		var axis_out: float = 1.0
+		if (code & 1) == 1:
+			orient = -orient
+			axis_out = -1.0
+		# The quad is cut into triangles a-b-c and a-c-d. If the two fold onto each other,
+		# the other cut (a-b-d and b-c-d) is tried and the one that folds less is kept.
+		var cr0: Vector3 = (vb - va).cross(vc - va)
+		var cr1: Vector3 = (vc - va).cross(vd - va)
+		var first_c: Vector3 = vc
+		var second_a: Vector3 = va
+		var fold: float = cr0.dot(cr1)
+		if fold < 0.0:
+			var alt0: Vector3 = (vb - va).cross(vd - va)
+			var alt1: Vector3 = (vc - vb).cross(vd - vb)
+			if alt0.dot(alt1) > fold:
+				cr0 = alt0
+				cr1 = alt1
+				first_c = vd
+				second_a = vb
 		for t in 2:
 			var p0: Vector3 = va
 			var p1: Vector3 = vb
-			var p2: Vector3 = vc
+			var p2: Vector3 = first_c
+			var cross: Vector3 = cr0
 			if t == 1:
+				p0 = second_a
 				p1 = vc
 				p2 = vd
-			var cross: Vector3 = (p1 - p0).cross(p2 - p0)
+				cross = cr1
 			var area2: float = cross.length()
 			if area2 < 0.0000001:
 				continue
-			var facing: float = cross.dot(outward)
-			var nn: Vector3 = cross / area2
-			if facing < 0.0:
-				nn = -nn
-			if facing * w < 0.0:
+			var side: float = orient
+			if by_shape:
+				side = 1.0
+				if cross[axis] * axis_out < 0.0:
+					side = -1.0
+			var nn: Vector3 = cross * (side / area2)
+			if side * w < 0.0:
 				var tmp: Vector3 = p1
 				p1 = p2
 				p2 = tmp
