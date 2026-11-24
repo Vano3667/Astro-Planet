@@ -6,6 +6,8 @@ extends RefCounted
 # Set 5 only replaces existing models (fixes after looking at pictures): no catalog, no palette.
 # Set 6 holds the resource nuggets; the old one-shape "nugget" entries are left out of the
 # catalog (the model itself stays: main.gd may still build it).
+# Set 7 is a DRAFT of plants and research finds that was not checked against the appearance
+# descriptions (see the warning at the top of models_set7.gd). It only adds new models.
 # SMOOTH_IDS: models of any set whose 12-sided cylinders are rebuilt with more sides
 # (seen on sheets 01, 02 and 05, 2026-11-24: small round bases looked faceted).
 # Set 5 does the same for its own list of models from sets 1 and 2 (with 20 sides).
@@ -15,6 +17,7 @@ const Set3 := preload("res://models/models_set3.gd")
 const Set4 := preload("res://models/models_set4.gd")
 const Set5 := preload("res://models/models_set5.gd")
 const Set6 := preload("res://models/models_set6.gd")
+const Set7 := preload("res://models/models_set7.gd")
 
 const SMOOTH_IDS := ["tether_post", "beacon", "crystal", "solar_small", "solar_medium", "oxygen_portable", "power_extender", "floodlight", "sensor"]
 const SMOOTH_SIDES := 16
@@ -29,6 +32,9 @@ static func get_parts(id: String) -> Array:
 
 static func _find_parts(id: String) -> Array:
 	var p: Array = Set5.parts5(id)
+	if not p.is_empty():
+		return p
+	p = Set7.parts7(id)
 	if not p.is_empty():
 		return p
 	p = Set6.parts6(id)
@@ -62,6 +68,8 @@ static func _smooth(src: Array) -> Array:
 
 
 static func get_color(key: String) -> Color:
+	if Set7.PALETTE7.has(key):
+		return Set7.PALETTE7[key]
 	if Set6.PALETTE6.has(key):
 		return Set6.PALETTE6[key]
 	if Set4.PALETTE4.has(key):
@@ -87,4 +95,5 @@ static func get_catalog() -> Array:
 	all.append_array(Set3.CATALOG3)
 	all.append_array(Set4.CATALOG4)
 	all.append_array(Set6.CATALOG6)
+	all.append_array(Set7.CATALOG7)
 	return all
