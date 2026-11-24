@@ -4,15 +4,21 @@ extends RefCounted
 # Sets are looked up from the newest to the oldest, so a newer set can replace a model.
 # To add a set: write models_setN.gd like models_set4.gd and add it here.
 # Set 5 only replaces existing models (fixes after looking at pictures): no catalog, no palette.
+# Set 6 holds the resource nuggets; the old one-shape "nugget" entries are left out of the
+# catalog (the model itself stays: main.gd may still build it).
 
 const Set2 := preload("res://models/models.gd")
 const Set3 := preload("res://models/models_set3.gd")
 const Set4 := preload("res://models/models_set4.gd")
 const Set5 := preload("res://models/models_set5.gd")
+const Set6 := preload("res://models/models_set6.gd")
 
 
 static func get_parts(id: String) -> Array:
 	var p: Array = Set5.parts5(id)
+	if not p.is_empty():
+		return p
+	p = Set6.parts6(id)
 	if not p.is_empty():
 		return p
 	p = Set4.parts4(id)
@@ -25,6 +31,8 @@ static func get_parts(id: String) -> Array:
 
 
 static func get_color(key: String) -> Color:
+	if Set6.PALETTE6.has(key):
+		return Set6.PALETTE6[key]
 	if Set4.PALETTE4.has(key):
 		return Set4.PALETTE4[key]
 	if Set3.PALETTE3.has(key):
@@ -33,11 +41,19 @@ static func get_color(key: String) -> Color:
 
 
 static func get_tint(key: String) -> Color:
+	if Set6.TINTS6.has(key):
+		return Set6.TINTS6[key]
 	return Set2.get_tint(key)
 
 
 static func get_catalog() -> Array:
-	var all: Array = Set2.get_catalog()
+	var all: Array = []
+	for item in Set2.get_catalog():
+		var entry: Dictionary = item
+		if str(entry["id"]) == "nugget":
+			continue
+		all.append(entry)
 	all.append_array(Set3.CATALOG3)
 	all.append_array(Set4.CATALOG4)
+	all.append_array(Set6.CATALOG6)
 	return all

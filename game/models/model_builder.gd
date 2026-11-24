@@ -3,6 +3,7 @@ extends RefCounted
 # All parts of one model are merged into one mesh with vertex colors:
 # surface 0 is lit, an optional second surface is unshaded (glow parts).
 # Boxes get rounded edges (a small automatic bevel, or the part's own "b" value).
+# A cylinder part with "flat": true, or with fewer than 4 sides, is built here with flat faces.
 # If res://models/custom/<id>.tscn or .glb exists, it is used instead,
 # so a generated model can be replaced by a hand-made one without code changes.
 # Written without running the engine; checked by the GitHub build.
@@ -167,8 +168,9 @@ static func _part_arrays(part: Dictionary) -> Array:
 		# Seen on the pictures: a cylinder asked for 3 sides came out with 4 (the triangle mark
 		# on platforms was a rhombus). The engine's cylinder seems to have at least 4 sides
 		# (from memory, not checked in its source), so a prism with fewer sides is built here.
+		# The same prism is used for parts marked "flat": faceted stones and crystals.
 		var sides: int = int(part.get("seg", 12))
-		if sides < 4:
+		if sides < 4 or bool(part.get("flat", false)):
 			var cs: Vector3 = part["s"]
 			var top_d: float = cs.z
 			if top_d < 0.0:
