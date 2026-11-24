@@ -4,14 +4,14 @@ extends Node3D
 # Labels are fixed in the world and face the center; they do not follow the head.
 # Written without running the engine; see docs/STATUS.md.
 
-const Models := preload("res://models/models.gd")
+const Models := preload("res://models/index.gd")
 const Builder := preload("res://models/model_builder.gd")
 
 const RINGS := [
-	{"radius": 1.8, "spacing": 0.45, "height": 0.9, "label_px": 0.0015, "offset": 0.0},
-	{"radius": 5.0, "spacing": 1.4, "height": 0.0, "label_px": 0.004, "offset": 0.0},
-	{"radius": 9.0, "spacing": 3.2, "height": 0.0, "label_px": 0.007, "offset": 0.5},
-	{"radius": 16.0, "spacing": 5.5, "height": 0.0, "label_px": 0.012, "offset": 0.0},
+	{"radius": 3.8, "spacing": 0.45, "height": 0.9, "label_px": 0.002, "offset": 0.0},
+	{"radius": 8.5, "spacing": 1.4, "height": 0.0, "label_px": 0.005, "offset": 0.0},
+	{"radius": 13.0, "spacing": 3.2, "height": 0.0, "label_px": 0.008, "offset": 0.5},
+	{"radius": 18.5, "spacing": 5.5, "height": 0.0, "label_px": 0.013, "offset": 0.0},
 ]
 
 var _pedestal_mat: StandardMaterial3D

@@ -120,11 +120,13 @@ jobs:
       - name: Check models
         run: |
           set -euo pipefail
-          timeout 300 godot --headless --xr-mode off --path game --script res://tools/check_models.gd 2>&1 | tee build/models.log
-          if grep -E "SCRIPT ERROR|Parse Error" build/models.log; then
-            echo "Script errors found during model check"
+          timeout 300 godot --headless --xr-mode off --path game --script res://tools/check_models.gd > build/models.log 2>&1 || true
+          tail -n 3 build/models.log
+          if grep -E "SCRIPT ERROR|Parse Error| FAIL$" build/models.log; then
+            echo "Model check failed"
             exit 1
           fi
+          grep -q "MODELS_TOTAL" build/models.log
 
       - name: Check terrain
         run: |
@@ -137,7 +139,8 @@ jobs:
 
       - name: Smoke run (headless, no headset)
         run: |
-          timeout 120 godot --headless --path game --quit-after 120 2>&1 | tee build/smoke.log || echo "smoke run returned non-zero"
+          timeout 120 godot --headless --path game --quit-after 120 > build/smoke.log 2>&1 || echo "smoke run returned non-zero"
+          grep -E "^\[main\]|ERROR" build/smoke.log || true
           if grep -E "SCRIPT ERROR|Parse Error" build/smoke.log; then
             echo "Script errors found during smoke run"
             exit 1
@@ -151,10 +154,8 @@ jobs:
           sudo apt-get install -y -qq xvfb libgl1-mesa-dri
           mkdir -p build/previews
           export PREVIEW_DIR="$GITHUB_WORKSPACE/build/previews"
-          timeout 600 xvfb-run -a -s "-screen 0 1280x1024x24" godot --xr-mode off --rendering-method gl_compatibility --rendering-driver opengl3 --audio-driver Dummy --resolution 1024x768 --path game --script res://tools/render_previews.gd 2>&1 | tee build/previews.log
-          echo "PNG files: $(ls build/previews/*.png 2>/dev/null | wc -l)"
-          echo "GLB files: $(ls build/previews/glb/*.glb 2>/dev/null | wc -l)"
-          du -sh build/previews
+          timeout 600 xvfb-run -a -s "-screen 0 1280x1024x24" godot --xr-mode off --rendering-method gl_compatibility --rendering-driver opengl3 --audio-driver Dummy --resolution 1024x768 --path game --script res://tools/render_previews.gd > build/previews.log 2>&1
+          tail -n 2 build/previews.log
 
       - name: Upload model previews
         if: always()
@@ -167,8 +168,7 @@ jobs:
       - name: Export debug APK
         run: |
           set -euo pipefail
-          godot --headless --path game --export-debug "Quest" "$GITHUB_WORKSPACE/build/astro-planet-debug.apk" 2>&1 | tee build/export.log
-          ls -la build
+          godot --headless --path game --export-debug "Quest" "$GITHUB_WORKSPACE/build/astro-planet-debug.apk" > build/export.log 2>&1
           test -s build/astro-planet-debug.apk
 
       - name: Upload APK
@@ -185,3 +185,13 @@ jobs:
           name: build-logs
           path: build/*.log
           if-no-files-found: ignore
+
+      # Short digest at the very end of the job log: an agent reads only the tail of the log.
+      - name: Summary
+        if: always()
+        run: |
+          echo "=== SUMMARY ==="
+          grep -hE "MODELS_TOTAL| FAIL$|TERRAIN_|PREVIEWS_SAVED|^\[main\]|SCRIPT ERROR|Parse Error" build/*.log | head -n 60 || true
+          grep -hE -A 6 "SCRIPT ERROR|Parse Error" build/*.log | head -n 60 || true
+          ls -la build/*.apk 2>/dev/null || echo "NO APK"
+          echo "=== END SUMMARY ==="

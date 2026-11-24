@@ -1,5 +1,5 @@
 extends RefCounted
-# Builds a model from the part lists in models.gd (which also covers model_library.gd).
+# Builds a model from the part lists that index.gd returns.
 # All parts of one model are merged into one mesh with vertex colors:
 # surface 0 is lit, an optional second surface is unshaded (glow parts).
 # Boxes get rounded edges (a small automatic bevel, or the part's own "b" value).
@@ -7,7 +7,7 @@ extends RefCounted
 # so a generated model can be replaced by a hand-made one without code changes.
 # Written without running the engine; checked by the GitHub build.
 
-const Models := preload("res://models/models.gd")
+const Models := preload("res://models/index.gd")
 const CUSTOM_DIR := "res://models/custom/"
 const DEFAULT_TINT := Color(0.6, 0.6, 0.6)
 const AUTO_BEVEL_RATIO := 0.22

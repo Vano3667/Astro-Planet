@@ -3,7 +3,7 @@ extends SceneTree
 # Run: godot --headless --xr-mode off --path game --script res://tools/check_models.gd
 # Exit code 1 if a model has no parts or no geometry.
 
-const Models := preload("res://models/models.gd")
+const Models := preload("res://models/index.gd")
 const Builder := preload("res://models/model_builder.gd")
 
 
