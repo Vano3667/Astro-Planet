@@ -1,12 +1,14 @@
 extends Node3D
-# Stage R2, first pass: a third-person character on flat ground.
+# Third-person character on editable ground.
 # Left stick: the character walks relative to where the head looks, the camera rig follows.
 # Right stick left or right: the view turns in steps around the character.
-# A or X: hide and show the model showroom.
+# Right trigger: dig. Right grip: add ground. A or X: hide and show the model showroom.
 # Written without running the engine; see docs/STATUS.md.
 
 const Gallery := preload("res://gallery.gd")
 const Builder := preload("res://models/model_builder.gd")
+const VoxelWorld := preload("res://terrain/voxel_world.gd")
+const DigTool := preload("res://terrain/dig_tool.gd")
 
 # Own values. The reference wiki has no numbers for walking speed.
 const WALK_SPEED := 3.0
@@ -15,10 +17,15 @@ const TURN_RATE := 12.0
 const SNAP_ANGLE_DEG := 30.0
 const SNAP_PRESS := 0.7
 const SNAP_RELEASE := 0.3
+# The character cannot step onto a ledge higher than this, meters.
+const MAX_STEP_UP := 0.8
+const RISE_SPEED := 6.0
+const FALL_SPEED := 9.0
 # Where the viewpoint is relative to the character at start:
 # the character stands CAM_DISTANCE meters ahead, the viewpoint is raised by CAM_HEIGHT.
 const CAM_DISTANCE := 3.0
 const CAM_HEIGHT := 0.8
+const CAM_FOLLOW := 6.0
 
 @onready var xr_origin: XROrigin3D = $XROrigin3D
 @onready var xr_camera: XRCamera3D = $XROrigin3D/XRCamera3D
@@ -30,14 +37,17 @@ var _xr_interface: XRInterface
 var _fps_timer: float = 0.0
 var _gallery: Node3D
 var _character: Node3D
+var _terrain: VoxelWorld
+var _tool: DigTool
 var _snap_ready: bool = true
 
 
 func _ready() -> void:
 	# Light direction is set here to avoid a hand-written rotation matrix in the scene file.
 	$Sun.rotation_degrees = Vector3(-50.0, 30.0, 0.0)
-	# The test cube from stage R0 is no longer needed.
+	# The test cube and the flat floor from stage R0 are replaced by the ground.
 	$Cube.visible = false
+	$Floor.visible = false
 
 	_xr_interface = XRServer.find_interface("OpenXR")
 	if _xr_interface and _xr_interface.is_initialized():
@@ -48,15 +58,29 @@ func _ready() -> void:
 	else:
 		print("[main] OpenXR is not initialized. Check the headset and Project Settings > XR > OpenXR.")
 
+	_terrain = VoxelWorld.new()
+	_terrain.name = "Terrain"
+	add_child(_terrain)
+
 	_gallery = Gallery.new()
 	_gallery.name = "Gallery"
 	add_child(_gallery)
+	var gallery_ground := _gallery.get_node_or_null("GalleryGround") as Node3D
+	if gallery_ground != null:
+		gallery_ground.visible = false
 	print("[main] gallery nodes: ", _gallery.get_child_count())
 
 	_setup_character()
 	_setup_hand(left_hand, true)
 	_setup_hand(right_hand, false)
 	_setup_wrist_label()
+
+	_tool = DigTool.new()
+	_tool.name = "DigTool"
+	add_child(_tool)
+	_tool.setup(right_hand, _terrain)
+
+	_terrain.set_focus(_character.global_position)
 
 	left_hand.button_pressed.connect(_on_button_pressed)
 	right_hand.button_pressed.connect(_on_button_pressed)
@@ -105,6 +129,7 @@ func _on_button_pressed(button: String) -> void:
 func _process(delta: float) -> void:
 	_update_fps(delta)
 	_update_move(delta)
+	_update_ground(delta)
 	_update_snap_turn()
 
 
@@ -112,7 +137,7 @@ func _update_fps(delta: float) -> void:
 	_fps_timer += delta
 	if _fps_timer >= 0.5:
 		_fps_timer = 0.0
-		fps_label.text = "%d fps\nA / X: модели" % int(Engine.get_frames_per_second())
+		fps_label.text = "%d fps  грунт: %d\nA / X: модели\nкурок: копать\nхват: насыпать" % [int(Engine.get_frames_per_second()), _terrain.pending_count()]
 
 
 func _update_move(delta: float) -> void:
@@ -129,12 +154,34 @@ func _update_move(delta: float) -> void:
 	var dir: Vector3 = forward * stick.y + right * stick.x
 	if dir.length() > 1.0:
 		dir = dir.normalized()
-	var step: Vector3 = dir * WALK_SPEED * delta
-	_character.global_position += step
-	xr_origin.global_position += step
 	# The front of the character model looks to -Z.
 	var target_yaw: float = atan2(-dir.x, -dir.z)
 	_character.rotation.y = lerp_angle(_character.rotation.y, target_yaw, clampf(TURN_RATE * delta, 0.0, 1.0))
+	var step: Vector3 = dir * WALK_SPEED * delta
+	var pos: Vector3 = _character.global_position
+	var ahead: float = _terrain.ground_y(pos.x + step.x, pos.z + step.z, pos.y)
+	if ahead - pos.y > MAX_STEP_UP:
+		# A wall or a steep ledge: the character does not walk into it.
+		return
+	_character.global_position = pos + step
+	xr_origin.global_position += step
+
+
+# Keeps the character on the ground and the viewpoint at a fixed height above it.
+func _update_ground(delta: float) -> void:
+	var pos: Vector3 = _character.global_position
+	var ground: float = _terrain.ground_y(pos.x, pos.z, pos.y)
+	var y: float = pos.y
+	if ground > y:
+		y = minf(ground, y + RISE_SPEED * delta)
+	else:
+		y = maxf(ground, y - FALL_SPEED * delta)
+	pos.y = y
+	_character.global_position = pos
+	var rig: Vector3 = xr_origin.global_position
+	rig.y = lerpf(rig.y, y + CAM_HEIGHT, clampf(CAM_FOLLOW * delta, 0.0, 1.0))
+	xr_origin.global_position = rig
+	_terrain.set_focus(pos)
 
 
 func _update_snap_turn() -> void:
