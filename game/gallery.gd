@@ -5,22 +5,27 @@ extends Node3D
 # the player looks at. Seen on the showroom pictures (2026-11-24): with all labels visible
 # they overlap and cannot be read; a single label could still be hidden behind a nearer
 # model, so labels are drawn on top of everything.
+# Seen on later showroom pictures (2026-11-24): the single label was hard to read and the
+# pedestals looked faceted, so labels are one and a half times larger and pedestals are round.
 # Written without running the engine; see docs/STATUS.md.
 
 const Models := preload("res://models/index.gd")
 const Builder := preload("res://models/model_builder.gd")
 
+# label_px: size of one text pixel in meters; the text is about 48 pixels tall. Own values.
 const RINGS := [
-	{"radius": 3.8, "spacing": 0.45, "height": 0.9, "label_px": 0.002, "offset": 0.0},
-	{"radius": 8.5, "spacing": 1.4, "height": 0.0, "label_px": 0.005, "offset": 0.0},
-	{"radius": 13.0, "spacing": 3.2, "height": 0.0, "label_px": 0.008, "offset": 0.5},
-	{"radius": 18.5, "spacing": 5.5, "height": 0.0, "label_px": 0.013, "offset": 0.0},
+	{"radius": 3.8, "spacing": 0.45, "height": 0.9, "label_px": 0.003, "offset": 0.0},
+	{"radius": 8.5, "spacing": 1.4, "height": 0.0, "label_px": 0.0075, "offset": 0.0},
+	{"radius": 13.0, "spacing": 3.2, "height": 0.0, "label_px": 0.012, "offset": 0.5},
+	{"radius": 18.5, "spacing": 5.5, "height": 0.0, "label_px": 0.019, "offset": 0.0},
 ]
 
 # A label appears when its model is within this angle from the view direction. Own values.
 const LABEL_CONE_DEG := 14.0
 # Small preference for nearer models when two are almost in one line.
 const LABEL_NEAR_BONUS := 0.0002
+# Sides of a pedestal.
+const PEDESTAL_SIDES := 20
 
 var _pedestal_mat: StandardMaterial3D
 var _labels: Array = []
@@ -109,7 +114,7 @@ func _place_ring(ring: Dictionary, entries: Array) -> void:
 		pedestal.top_radius = 0.14
 		pedestal.bottom_radius = 0.16
 		pedestal.height = base_y
-		pedestal.radial_segments = 10
+		pedestal.radial_segments = PEDESTAL_SIDES
 		pedestal.rings = 1
 		pedestal.material = _pedestal_mat
 
