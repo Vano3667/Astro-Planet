@@ -1,14 +1,17 @@
 extends "res://models/models.gd"
 # Model set 5: fixes made after looking at rendered pictures of the models.
-# The first picture the agent could actually see was backpack.png (2026-11-24).
-# What was wrong in it and is fixed here:
+# What the agent has seen and what was fixed is logged in docs/REVIEW.md.
+#
+# backpack, explorer (seen: backpack.png, 2026-11-24):
 #   - round slots had 12 sides and looked faceted;
 #   - slots stuck out like buttons instead of looking like sockets;
 #   - the tool on the side read as a plain gray block with an orange bit;
 #   - the stand-alone backpack was a mirror image of the one worn by the explorer.
-# The layout (bar on top, gauge in the middle, printer panel at the bottom) is an own
-# layout. The appearance description of the character is not collected yet
-# (astro-planet-research, data/appearance/character.md); redo this set when it arrives.
+#   The layout (bar on top, gauge in the middle, printer panel at the bottom) is an own
+#   layout. The appearance description of the character is not collected yet
+#   (astro-planet-research, data/appearance/character.md); redo it when it arrives.
+# rock_large (seen: sheet 03, 2026-11-24): read as a ball with a slab stuck into it.
+#
 # Written without running the engine; checked by tools/check_models.gd.
 
 # Number of parts in _explorer2() before the backpack parts are appended.
@@ -25,6 +28,8 @@ static func parts5(id: String) -> Array:
 			return _backpack5()
 		"explorer":
 			return _explorer5()
+		"rock_large":
+			return _rock_large5()
 	return []
 
 
@@ -79,3 +84,15 @@ static func _explorer5() -> Array:
 	var a: Array = get_parts("explorer").slice(0, EXPLORER_BODY_PARTS)
 	a.append_array(_pack5(0.66, 0.37, 1.0))
 	return a
+
+
+# A big rock: a wide faceted base, a smaller block on top and two blocks at the sides.
+# Sizes are own values (about 3.4 m wide and 2 m tall).
+static func _rock_large5() -> Array:
+	return [
+		cy(2.6, 1.3, 0.0, 0.65, 0.0, "gray", 0.0, 0.0, 0.0, 1.7, 7),
+		cy(1.6, 0.8, 0.1, 1.62, 0.0, "gray", 5.0, 25.0, -4.0, 0.8, 6),
+		cy(1.5, 0.9, 1.25, 0.45, 0.45, "gray_dark", 0.0, 40.0, 0.0, 0.8, 6),
+		cy(1.2, 0.6, -1.15, 0.30, -0.5, "gray_dark", 0.0, 15.0, 0.0, 0.6, 5),
+		sp(0.7, 0.3, 0.6, -0.2, 2.02, 0.1, "gray_light"),
+	]

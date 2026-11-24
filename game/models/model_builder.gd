@@ -48,6 +48,29 @@ class Bucket:
 				indices.append(base + src_i[i])
 
 
+# Flat-shaded triangles for hand-made geometry. n = outward normal, w = winding sign.
+class Tris:
+	var verts := PackedVector3Array()
+	var normals := PackedVector3Array()
+	var indices := PackedInt32Array()
+
+	func add(a: Vector3, b: Vector3, c: Vector3, n: Vector3, w: float) -> void:
+		var base := verts.size()
+		verts.append(a)
+		verts.append(b)
+		verts.append(c)
+		normals.append(n)
+		normals.append(n)
+		normals.append(n)
+		indices.append(base)
+		if (b - a).cross(c - a).dot(n) * w < 0.0:
+			indices.append(base + 2)
+			indices.append(base + 1)
+		else:
+			indices.append(base + 1)
+			indices.append(base + 2)
+
+
 static func build(id: String, tint: Color = DEFAULT_TINT) -> Node3D:
 	for ext in ["tscn", "glb"]:
 		var path: String = CUSTOM_DIR + id + "." + str(ext)
@@ -140,6 +163,17 @@ static func _part_arrays(part: Dictionary) -> Array:
 			bevel = minf(minf(size.x, minf(size.y, size.z)) * AUTO_BEVEL_RATIO, AUTO_BEVEL_MAX)
 		if bevel >= MIN_BEVEL:
 			return _rounded_box_arrays(size, bevel)
+	if kind == "cyl":
+		# Seen on the pictures: a cylinder asked for 3 sides came out with 4 (the triangle mark
+		# on platforms was a rhombus). The engine's cylinder seems to have at least 4 sides
+		# (from memory, not checked in its source), so a prism with fewer sides is built here.
+		var sides: int = int(part.get("seg", 12))
+		if sides < 4:
+			var cs: Vector3 = part["s"]
+			var top_d: float = cs.z
+			if top_d < 0.0:
+				top_d = cs.x
+			return _prism_arrays(cs.x * 0.5, top_d * 0.5, cs.y, maxi(sides, 3))
 	var prim: PrimitiveMesh = _primitive(part)
 	if prim == null:
 		return []
@@ -168,6 +202,60 @@ static func _winding() -> float:
 
 static func _flip(a: Vector3, b: Vector3, c: Vector3, outward: Vector3, w: float) -> bool:
 	return (b - a).cross(c - a).dot(outward) * w < 0.0
+
+
+# Prism or pyramid with flat faces: the axis is Y, the first corner looks to +Z
+# (the same as the engine's cylinder). Radius 0 on one end gives a pyramid.
+static func _prism_arrays(r_bottom: float, r_top: float, height: float, sides: int) -> Array:
+	var w: float = _winding()
+	var hy: float = height * 0.5
+	var bot: Array = []
+	var top: Array = []
+	for k in sides:
+		var a: float = TAU * float(k) / float(sides)
+		bot.append(Vector3(sin(a) * r_bottom, -hy, cos(a) * r_bottom))
+		top.append(Vector3(sin(a) * r_top, hy, cos(a) * r_top))
+	var has_top: bool = r_top > 0.0005
+	var has_bottom: bool = r_bottom > 0.0005
+	var t := Tris.new()
+	for k in range(1, sides - 1):
+		if has_top:
+			var ta: Vector3 = top[0]
+			var tb: Vector3 = top[k]
+			var tc: Vector3 = top[k + 1]
+			t.add(ta, tb, tc, Vector3.UP, w)
+		if has_bottom:
+			var ba: Vector3 = bot[0]
+			var bb: Vector3 = bot[k]
+			var bc: Vector3 = bot[k + 1]
+			t.add(ba, bb, bc, Vector3.DOWN, w)
+	for k in sides:
+		var k2: int = (k + 1) % sides
+		var b0: Vector3 = bot[k]
+		var b1: Vector3 = bot[k2]
+		var t0: Vector3 = top[k]
+		var t1: Vector3 = top[k2]
+		var nrm: Vector3
+		if has_bottom:
+			nrm = (b1 - b0).cross(t0 - b0)
+		else:
+			nrm = (t1 - b0).cross(t0 - b0)
+		if nrm.length() < 0.0000001:
+			continue
+		nrm = nrm.normalized()
+		var mid: Vector3 = (b0 + b1 + t0 + t1) * 0.25
+		if nrm.dot(Vector3(mid.x, 0.0, mid.z)) < 0.0:
+			nrm = -nrm
+		if has_bottom:
+			t.add(b0, b1, t1, nrm, w)
+		if has_top:
+			t.add(b0, t1, t0, nrm, w)
+	var arr: Array = []
+	arr.resize(Mesh.ARRAY_MAX)
+	arr[Mesh.ARRAY_VERTEX] = t.verts
+	arr[Mesh.ARRAY_NORMAL] = t.normals
+	arr[Mesh.ARRAY_INDEX] = t.indices
+	return arr
 
 
 # Box with rounded edges and corners. Every face is a 4 x 4 grid of points; the outer
