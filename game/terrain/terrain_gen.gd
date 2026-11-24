@@ -35,20 +35,22 @@ const CAVE_FLATTEN := 1.6
 # Resources in the ground. A resource type is a number from 1; 0 means plain soil.
 # The list is what the reference wiki gives for the starting planet: the first eight are found
 # everywhere, malachite in mountains and deep down, sphalerite only deep down.
-# Colors are own guesses until descriptions of the look are collected.
+# Colors are the main colors measured for the appearance descriptions
+# (astro-planet-research, data/appearance/resources.md). They must stay the same as TINTS6
+# in models/models_set6.gd, so that a deposit in the ground and its nugget match.
 const RES_IDS := ["compound", "resin", "organic", "clay", "quartz", "graphite", "laterite", "ammonium", "malachite", "sphalerite"]
 const RES_TITLES := ["компаунд", "смола", "органика", "глина", "кварц", "графит", "латерит", "аммоний", "малахит", "сфалерит"]
 const RES_COLORS := [
-	Color(0.82, 0.84, 0.88),
-	Color(0.93, 0.70, 0.20),
-	Color(0.20, 0.44, 0.16),
-	Color(0.75, 0.45, 0.35),
-	Color(0.88, 0.93, 0.98),
-	Color(0.20, 0.21, 0.23),
-	Color(0.60, 0.33, 0.28),
-	Color(0.95, 0.90, 0.45),
-	Color(0.10, 0.62, 0.45),
-	Color(0.55, 0.42, 0.70),
+	Color(0.47, 0.47, 0.53),
+	Color(0.72, 0.63, 0.19),
+	Color(0.345, 0.47, 0.03),
+	Color(0.47, 0.31, 0.28),
+	Color(0.85, 0.69, 0.75),
+	Color(0.19, 0.19, 0.19),
+	Color(0.25, 0.19, 0.31),
+	Color(0.66, 0.565, 0.345),
+	Color(0.60, 0.28, 0.22),
+	Color(0.345, 0.28, 0.41),
 ]
 # How often each resource appears (own values).
 const RES_WEIGHTS := [3.0, 3.0, 2.0, 1.5, 1.5, 1.0, 1.0, 0.7, 1.2, 1.5]
