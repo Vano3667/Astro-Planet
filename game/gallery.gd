@@ -3,7 +3,8 @@ extends Node3D
 # Ring 0 (small items) is on pedestals, bigger things are farther away.
 # Labels are fixed in the world. Only one label is visible at a time: the one of the model
 # the player looks at. Seen on the showroom pictures (2026-11-24): with all labels visible
-# they overlap and cannot be read.
+# they overlap and cannot be read; a single label could still be hidden behind a nearer
+# model, so labels are drawn on top of everything.
 # Written without running the engine; see docs/STATUS.md.
 
 const Models := preload("res://models/index.gd")
@@ -147,6 +148,8 @@ func _place_ring(ring: Dictionary, entries: Array) -> void:
 		label.position = Vector3(px, base_y + (top - bottom) + 48.0 * label_px * 0.9, pz)
 		# The label stays in its place but turns to the viewer and stays upright.
 		label.billboard = BaseMaterial3D.BILLBOARD_FIXED_Y
+		# Drawn on top of everything: a nearer model must not cover the only visible label.
+		label.no_depth_test = true
 		label.visible = false
 		add_child(label)
 		_labels.append(label)

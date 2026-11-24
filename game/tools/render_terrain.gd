@@ -5,7 +5,9 @@ extends SceneTree
 #   terrain_3_from_above     the start area from above
 #   terrain_4_far_mountain   the far low-detail ground, looking at the highest point nearby
 #   terrain_5_dig            pits dug into the starter deposits and a mound of added ground
-#   terrain_6_cave           a view from inside the biggest cave found under the start area
+#   terrain_6_cave           a view from inside the biggest cave found under the start area,
+#                            with the ground loaded around that point and the cave look on,
+#                            as it would be in the game
 #   terrain_7_mountain_near  the foot of that highest point with detailed ground
 # Needs a real renderer (not --headless); the GitHub build runs it under xvfb.
 # Output folder: env PREVIEW_DIR. Lines for the build log start with TERRAIN_SHOT.
@@ -16,6 +18,7 @@ const Gen := preload("res://terrain/terrain_gen.gd")
 const VoxelWorld := preload("res://terrain/voxel_world.gd")
 const FarTerrain := preload("res://terrain/far_terrain.gd")
 const Scatter := preload("res://terrain/scatter.gd")
+const CaveLook := preload("res://terrain/cave_look.gd")
 const Gallery := preload("res://gallery.gd")
 const Builder := preload("res://models/model_builder.gd")
 
@@ -148,25 +151,28 @@ func _run() -> void:
 					open = d
 					cave = Vector3(cx, cy, cz)
 	if open < -0.4:
+		# In the game the detailed ground is always loaded around the character.
+		# The first version of this picture kept the ground loaded around the start, and the
+		# tunnel was cut open 12 m from the camera, which the game would not show.
+		_focus(cave)
+		frames = await _wait_ground()
 		var best_dir := Vector3(0.0, 0.0, -1.0)
 		var best_len: float = 0.0
 		for k in 12:
 			var ang: float = TAU * float(k) / 12.0
 			var dir := Vector3(sin(ang), 0.0, cos(ang))
-			var hit: Dictionary = _terrain.raycast(cave, dir, 30.0)
+			var hit: Dictionary = _terrain.raycast(cave, dir, 60.0)
 			var hit_pos: Vector3 = hit["position"]
 			var free_len: float = (hit_pos - cave).length()
 			if free_len > best_len:
 				best_len = free_len
 				best_dir = dir
-		print("TERRAIN_SHOT cave x=%.0f y=%.1f z=%.0f density=%.2f free_ahead=%.1f" % [cave.x, cave.y, cave.z, open, best_len])
-		var lamp := OmniLight3D.new()
-		root.add_child(lamp)
-		lamp.position = cave
-		lamp.omni_range = 30.0
-		lamp.light_energy = 1.2
+		var roof: bool = CaveLook.under_roof(_terrain, cave)
+		print("TERRAIN_SHOT cave x=%.0f y=%.1f z=%.0f density=%.2f free_ahead=%.1f roof=%s frames=%d pending=%d" % [cave.x, cave.y, cave.z, open, best_len, str(roof), frames, _terrain.pending_count()])
+		# The same look that main.gd switches on under a roof.
+		_cam.environment = CaveLook.make_environment()
 		await _shot("terrain_6_cave", cave, cave + best_dir * 5.0)
-		lamp.visible = false
+		_cam.environment = null
 	else:
 		print("TERRAIN_SHOT cave not found, most open density=%.2f" % open)
 
@@ -180,7 +186,7 @@ func _run() -> void:
 		frames = await _wait_ground()
 		var cam_pos: Vector3 = foot - to_peak * 16.0
 		cam_pos.y = maxf(Gen.height(cam_pos.x, cam_pos.z), foot.y) + 6.0
-		print("TERRAIN_SHOT mountain frames=%d pending=%d foot_height=%.1f" % [frames, _terrain.pending_count(), foot.y])
+		print("TERRAIN_SHOT mountain frames=%d pending=%d foot_height=%.1f props=%d" % [frames, _terrain.pending_count(), foot.y, _scatter.prop_count])
 		await _shot("terrain_7_mountain_near", cam_pos, Vector3(peak.x, peak.y * 0.75, peak.z))
 
 	print("TERRAIN_SHOTS_SAVED %d" % _saved)

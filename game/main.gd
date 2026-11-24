@@ -14,6 +14,7 @@ const VoxelWorld := preload("res://terrain/voxel_world.gd")
 const FarTerrain := preload("res://terrain/far_terrain.gd")
 const DigTool := preload("res://terrain/dig_tool.gd")
 const Scatter := preload("res://terrain/scatter.gd")
+const CaveLook := preload("res://terrain/cave_look.gd")
 
 # Own values. The reference wiki has no numbers for walking speed.
 const WALK_SPEED := 3.0
@@ -31,6 +32,8 @@ const FALL_SPEED := 9.0
 const CAM_DISTANCE := 3.0
 const CAM_HEIGHT := 0.8
 const CAM_FOLLOW := 6.0
+# How often the roof above the camera is checked, seconds.
+const CAVE_CHECK := 0.25
 
 @onready var xr_origin: XROrigin3D = $XROrigin3D
 @onready var xr_camera: XRCamera3D = $XROrigin3D/XRCamera3D
@@ -50,6 +53,9 @@ var _scatter: Scatter
 var _snap_ready: bool = true
 # Nuggets that fly from the dig spot to the character: {"node", "from", "t"}.
 var _flying: Array = []
+var _cave_env: Environment
+var _cave_timer: float = 0.0
+var _in_cave: bool = false
 
 
 func _ready() -> void:
@@ -186,12 +192,13 @@ func _process(delta: float) -> void:
 		# Lines for the build log: show that the ground was built without a headset.
 		print("[main] frame 100: terrain built=%d pending=%d props=%d character_y=%.2f" % [_terrain.built_count, _terrain.pending_count(), _scatter.prop_count, _character.global_position.y])
 	if _frame == 115:
-		print("[main] frame 115: far ground tris=%d build_ms=%.1f builds=%d" % [_far.tri_count, _far.build_ms, _far.build_count])
+		print("[main] frame 115: far ground tris=%d build_ms=%.1f builds=%d cave_look=%s" % [_far.tri_count, _far.build_ms, _far.build_count, str(_in_cave)])
 	_update_fps(delta)
 	_update_move(delta)
 	_update_ground(delta)
 	_update_snap_turn()
 	_update_flying(delta)
+	_update_cave(delta)
 
 
 func _update_fps(delta: float) -> void:
@@ -284,3 +291,22 @@ func _update_flying(delta: float) -> void:
 			var s: float = 1.6 - t
 			node.scale = Vector3(s, s, s)
 		i -= 1
+
+
+# Under a roof of ground the camera gets a dark background and fog (terrain/cave_look.gd):
+# where the detailed ground ends, tunnels are cut open and the sky would show through.
+func _update_cave(delta: float) -> void:
+	_cave_timer += delta
+	if _cave_timer < CAVE_CHECK:
+		return
+	_cave_timer = 0.0
+	var under: bool = CaveLook.under_roof(_terrain, xr_camera.global_position)
+	if under == _in_cave:
+		return
+	_in_cave = under
+	if under:
+		if _cave_env == null:
+			_cave_env = CaveLook.make_environment()
+		xr_camera.environment = _cave_env
+	else:
+		xr_camera.environment = null
