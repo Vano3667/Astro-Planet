@@ -8,13 +8,16 @@
 управление контроллерами Touch, предметы переносятся движением контроллера.
 
 **Статус:** самое начало. APK собирается на GitHub автоматически, но на шлеме ещё ни разу не запускался.
+Сейчас в APK пустая сцена и витрина 3D-моделей будущих предметов.
 Актуальное состояние: [docs/STATUS.md](docs/STATUS.md).
 
-## Как получить APK
+## Как получить APK и картинки моделей
 
 Вкладка [Actions](https://github.com/Vano3667/Astro-Planet/actions), последний зелёный запуск
-«Build Quest APK», внизу раздел Artifacts, файл `astro-planet-debug-apk`.
-Как поставить его на шлем: [docs/R0_SETUP.md](docs/R0_SETUP.md).
+«Build Quest APK», внизу раздел Artifacts:
+
+- `astro-planet-debug-apk` - приложение для шлема. Как поставить: [docs/R0_SETUP.md](docs/R0_SETUP.md).
+- `model-previews` - картинки всех моделей и сами модели в формате `.glb`.
 
 ## Документы
 
