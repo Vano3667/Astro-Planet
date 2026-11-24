@@ -125,6 +125,36 @@ jobs:
             exit 1
           fi
 
+      - name: Check models
+        run: |
+          set -euo pipefail
+          timeout 300 godot --headless --xr-mode off --path game --script res://tools/check_models.gd 2>&1 | tee build/models.log
+          if grep -E "SCRIPT ERROR|Parse Error" build/models.log; then
+            echo "Script errors found during model check"
+            exit 1
+          fi
+
+      - name: Render model previews (optional)
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb libgl1-mesa-dri
+          mkdir -p build/previews
+          export PREVIEW_DIR="$GITHUB_WORKSPACE/build/previews"
+          timeout 600 xvfb-run -a -s "-screen 0 1280x1024x24" godot --xr-mode off --rendering-method gl_compatibility --rendering-driver opengl3 --audio-driver Dummy --resolution 1024x768 --path game --script res://tools/render_previews.gd 2>&1 | tee build/previews.log
+          echo "PNG files: $(ls build/previews/*.png 2>/dev/null | wc -l)"
+          echo "GLB files: $(ls build/previews/glb/*.glb 2>/dev/null | wc -l)"
+          du -sh build/previews
+
+      - name: Upload model previews
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-previews
+          path: build/previews
+          if-no-files-found: ignore
+
       - name: Export debug APK
         run: |
           set -euo pipefail
