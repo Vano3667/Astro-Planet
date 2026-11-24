@@ -12,7 +12,7 @@ const Nets := preload("res://terrain/surface_nets.gd")
 
 const VIEW := 4            # chunks kept around the focus along X and Z
 const VIEW_DOWN := 2       # chunk layers kept below the focus
-const VIEW_UP := 1         # chunk layers kept above the focus
+const VIEW_UP := 2         # chunk layers kept above the focus (mountains)
 const MAX_RUNNING := 4
 const MAX_START_PER_FRAME := 4
 
@@ -359,7 +359,7 @@ func _edit_chunk(key: Vector3i, mode: int, center: Vector3, radius: float, lo: V
 					if owned:
 						var res: int = 0
 						# A resource is only where the untouched ground was, and only once.
-						if fresh and heights[i + pc * k] > wy:
+						if fresh and Gen.density(wx, wy, wz, heights[i + pc * k]) > 0.0:
 							res = Gen.resource_at(deposits, wx, wy, wz)
 						if res > 0:
 							stat_removed_res[res - 1] += 1
@@ -414,7 +414,8 @@ func density_at(p: Vector3) -> float:
 	var key: Vector3i = key_of(p)
 	var c: Chunk = _chunks.get(key)
 	if c == null or c.density.is_empty():
-		return Gen.height(p.x, p.z) - p.y
+		# The chunk is not loaded: use the formula of the untouched ground.
+		return Gen.density(p.x, p.y, p.z, Gen.height(p.x, p.z))
 	var pc: int = Gen.P
 	var pp: int = pc * pc
 	var g: Vector3 = (p - Gen.chunk_origin(key)) / Gen.VOXEL

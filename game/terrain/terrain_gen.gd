@@ -13,15 +13,29 @@ const MIXED := 0
 const AIR := 1
 const SOLID := 2
 
-# The start area is flat (the model showroom stands there), hills begin farther away.
+# The start area is flat (the model showroom stands there), hills begin farther away,
+# mountains begin still farther. All sizes are own values.
 const PLATEAU_RADIUS := 22.0
 const BLEND_WIDTH := 18.0
 const HILL_HEIGHT := 5.0
 const DETAIL_HEIGHT := 0.6
+const MOUNTAIN_START := 55.0
+const MOUNTAIN_BLEND := 40.0
+const MOUNTAIN_HEIGHT := 32.0
+const MOUNTAIN_LEVEL := 0.1
+
+# Caves: hollow places in the ground, never closer to the surface than CAVE_ROOF meters.
+const CAVES := true
+const CAVE_THRESHOLD := 0.38
+const CAVE_SCALE := 12.0
+const CAVE_ROOF := 4.0
+const CAVE_FADE := 4.0
+const CAVE_FLATTEN := 1.6
 
 # Resources in the ground. A resource type is a number from 1; 0 means plain soil.
-# The list is what the reference wiki gives for the starting planet. Colors are own guesses
-# until descriptions of the look are collected.
+# The list is what the reference wiki gives for the starting planet: the first eight are found
+# everywhere, malachite in mountains and deep down, sphalerite only deep down.
+# Colors are own guesses until descriptions of the look are collected.
 const RES_IDS := ["compound", "resin", "organic", "clay", "quartz", "graphite", "laterite", "ammonium", "malachite", "sphalerite"]
 const RES_TITLES := ["компаунд", "смола", "органика", "глина", "кварц", "графит", "латерит", "аммоний", "малахит", "сфалерит"]
 const RES_COLORS := [
@@ -37,7 +51,11 @@ const RES_COLORS := [
 	Color(0.55, 0.42, 0.70),
 ]
 # How often each resource appears (own values).
-const RES_WEIGHTS := [3.0, 3.0, 2.0, 1.5, 1.5, 1.0, 1.0, 0.7, 0.7, 0.7]
+const RES_WEIGHTS := [3.0, 3.0, 2.0, 1.5, 1.5, 1.0, 1.0, 0.7, 1.2, 1.5]
+const RES_COMMON := 8          # the first eight resources are found on the surface
+const RES_DEEP_FIRST := 3      # deep deposits use resources from this index on
+const RES_MALACHITE := 9
+const MOUNTAIN_ORE_HEIGHT := 6.0
 
 # Deposits are balls of resource. Each 16 m column of the world holds 0 to 2 of them.
 const DEPOSIT_CELL := 16.0
@@ -53,36 +71,57 @@ const STARTER_DEPOSITS := [
 
 static var _hills: FastNoiseLite
 static var _detail: FastNoiseLite
+static var _mount: FastNoiseLite
+static var _cave: FastNoiseLite
 
 
-# Call once on the main thread before worker threads use height().
+static func _make_noise(seed_value: int, frequency: float) -> FastNoiseLite:
+	var n := FastNoiseLite.new()
+	n.seed = seed_value
+	n.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
+	n.fractal_type = FastNoiseLite.FRACTAL_NONE
+	n.frequency = frequency
+	return n
+
+
+# Call once on the main thread before worker threads use height() or density().
 static func warm_up() -> void:
-	if _hills != null and _detail != null:
+	if _hills != null and _detail != null and _mount != null and _cave != null:
 		return
-	var d := FastNoiseLite.new()
-	d.seed = 77
-	d.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
-	d.fractal_type = FastNoiseLite.FRACTAL_NONE
-	d.frequency = 0.07
-	_detail = d
-	var h := FastNoiseLite.new()
-	h.seed = 1207
-	h.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
-	h.fractal_type = FastNoiseLite.FRACTAL_NONE
-	h.frequency = 0.018
-	_hills = h
+	_detail = _make_noise(77, 0.07)
+	_mount = _make_noise(3301, 0.008)
+	_cave = _make_noise(5519, 0.045)
+	_hills = _make_noise(1207, 0.018)
 
 
 # Height of the untouched ground at a point, meters.
 static func height(x: float, z: float) -> float:
-	if _hills == null or _detail == null:
+	if _hills == null or _detail == null or _mount == null:
 		warm_up()
 	var dist: float = sqrt(x * x + z * z)
 	var k: float = smoothstep(PLATEAU_RADIUS, PLATEAU_RADIUS + BLEND_WIDTH, dist)
 	if k <= 0.0:
 		return 0.0
-	var hills: float = _hills.get_noise_2d(x, z) * HILL_HEIGHT + _detail.get_noise_2d(x, z) * DETAIL_HEIGHT
-	return hills * k
+	var result: float = (_hills.get_noise_2d(x, z) * HILL_HEIGHT + _detail.get_noise_2d(x, z) * DETAIL_HEIGHT) * k
+	var km: float = smoothstep(MOUNTAIN_START, MOUNTAIN_START + MOUNTAIN_BLEND, dist)
+	if km > 0.0:
+		var m: float = _mount.get_noise_2d(x, z)
+		if m > MOUNTAIN_LEVEL:
+			result += (m - MOUNTAIN_LEVEL) * MOUNTAIN_HEIGHT * km
+	return result
+
+
+# Density of the untouched ground at a point; h is height(x, z).
+static func density(x: float, y: float, z: float, h: float) -> float:
+	var d: float = h - y
+	if not CAVES or d < CAVE_ROOF:
+		return d
+	if _cave == null:
+		warm_up()
+	# Close to the surface the bar for a cave is raised so high that none appears.
+	var t: float = CAVE_THRESHOLD + maxf(0.0, 1.0 - (d - CAVE_ROOF) / CAVE_FADE) * 0.7
+	var c: float = (t - _cave.get_noise_3d(x, y * CAVE_FLATTEN, z)) * CAVE_SCALE
+	return minf(d, c)
 
 
 static func chunk_origin(key: Vector3i) -> Vector3:
@@ -101,7 +140,8 @@ static func column_heights(key: Vector3i) -> PackedFloat32Array:
 	return out
 
 
-# AIR or SOLID if the untouched chunk has no surface inside, otherwise MIXED.
+# AIR if the untouched chunk is entirely above the ground, SOLID if it is entirely
+# inside the ground and there are no caves, otherwise MIXED.
 static func classify(key: Vector3i, heights: PackedFloat32Array) -> int:
 	var lo: float = heights[0]
 	var hi: float = heights[0]
@@ -115,7 +155,7 @@ static func classify(key: Vector3i, heights: PackedFloat32Array) -> int:
 	var y_max: float = y_min + (P - 1) * VOXEL
 	if hi < y_min:
 		return AIR
-	if lo > y_max:
+	if lo > y_max and not CAVES:
 		return SOLID
 	return MIXED
 
@@ -125,13 +165,20 @@ static func classify(key: Vector3i, heights: PackedFloat32Array) -> int:
 static func fill_density(key: Vector3i, heights: PackedFloat32Array) -> PackedFloat32Array:
 	var d := PackedFloat32Array()
 	d.resize(P * P * P)
-	var y0: float = chunk_origin(key).y - VOXEL
+	var origin: Vector3 = chunk_origin(key)
+	var y0: float = origin.y - VOXEL
 	for k in P:
+		var wz: float = origin.z + (k - 1) * VOXEL
 		for i in P:
 			var h: float = heights[i + P * k]
+			var wx: float = origin.x + (i - 1) * VOXEL
 			var base: int = i + P * P * k
 			for j in P:
-				d[base + P * j] = h - (y0 + j * VOXEL)
+				var wy: float = y0 + j * VOXEL
+				var dd: float = h - wy
+				if CAVES and dd >= CAVE_ROOF:
+					dd = density(wx, wy, wz, h)
+				d[base + P * j] = dd
 	return d
 
 
@@ -141,17 +188,17 @@ static func _touches(lo: Vector3, hi: Vector3, x: float, y: float, z: float, r: 
 	return x + r >= lo.x and x - r <= hi.x and y + r >= lo.y and y - r <= hi.y and z + r >= lo.z and z - r <= hi.z
 
 
-# Picks a resource type by weight; r is a random number 0..1, first is the first index to use.
-static func _pick_type(r: float, first: int) -> int:
+# Picks a resource type by weight among count resources starting at index first; r is 0..1.
+static func _pick_type(r: float, first: int, count: int) -> int:
 	var total: float = 0.0
-	for i in range(first, RES_WEIGHTS.size()):
+	for i in range(first, first + count):
 		total += float(RES_WEIGHTS[i])
 	var acc: float = 0.0
-	for i in range(first, RES_WEIGHTS.size()):
+	for i in range(first, first + count):
 		acc += float(RES_WEIGHTS[i])
 		if r * total <= acc:
 			return i + 1
-	return RES_WEIGHTS.size()
+	return first + count
 
 
 # Deposits that reach into a chunk: five numbers per deposit (x, y, z, radius, type).
@@ -179,17 +226,21 @@ static func deposits_for(key: Vector3i) -> PackedFloat32Array:
 				var x: float = (float(cx) + rng.randf()) * DEPOSIT_CELL
 				var z: float = (float(cz) + rng.randf()) * DEPOSIT_CELL
 				var radius: float = rng.randf_range(1.3, DEPOSIT_MAX_RADIUS)
-				var deep: bool = rng.randf() < 0.35
+				var deep: bool = rng.randf() < 0.4
 				var depth: float = rng.randf_range(5.0, 13.0)
 				var pick: float = rng.randf()
+				var pick2: float = rng.randf()
 				if x * x + z * z < DEPOSIT_MIN_DIST * DEPOSIT_MIN_DIST:
 					continue
-				# A surface deposit shows as a colored patch; a deep one is found by digging.
-				var y: float = height(x, z) - radius * 0.35
-				var type: int = _pick_type(pick, 0)
+				var h: float = height(x, z)
+				# A surface deposit shows as a colored patch; a deep one is found by digging or in a cave.
+				var y: float = h - radius * 0.35
+				var type: int = _pick_type(pick, 0, RES_COMMON)
+				if h > MOUNTAIN_ORE_HEIGHT and pick2 < 0.5:
+					type = RES_MALACHITE
 				if deep:
-					y = height(x, z) - depth
-					type = _pick_type(pick, 3)
+					y = h - depth
+					type = _pick_type(pick, RES_DEEP_FIRST, RES_IDS.size() - RES_DEEP_FIRST)
 				if _touches(lo, hi, x, y, z, radius):
 					out.append(x)
 					out.append(y)
