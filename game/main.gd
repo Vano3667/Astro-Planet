@@ -4,6 +4,7 @@ extends Node3D
 # Right stick left or right: the view turns in steps around the character.
 # Right trigger: dig. Right grip: add ground. B: level the ground.
 # A or X: hide and show the model showroom.
+# Under a roof of ground the view gets dark and a lamp over the character switches on.
 # Written without running the engine; see docs/STATUS.md.
 
 const Gallery := preload("res://gallery.gd")
@@ -56,6 +57,8 @@ var _flying: Array = []
 var _cave_env: Environment
 var _cave_timer: float = 0.0
 var _in_cave: bool = false
+# The light over the character; visible only under a roof.
+var _lamp: OmniLight3D
 
 
 func _ready() -> void:
@@ -120,6 +123,12 @@ func _setup_character() -> void:
 	add_child(_character)
 	_character.position = Vector3(0.0, 0.0, -CAM_DISTANCE)
 	xr_origin.position = Vector3(0.0, CAM_HEIGHT, 0.0)
+	# The lamp moves with the character and is switched on in _update_cave.
+	_lamp = CaveLook.make_lamp()
+	_lamp.name = "Lamp"
+	_lamp.position = Vector3(0.0, CaveLook.LAMP_HEIGHT, 0.0)
+	_lamp.visible = false
+	_character.add_child(_lamp)
 
 
 # Replaces the gray box on a controller with the glove scene from models/custom/glove.tscn.
@@ -192,7 +201,7 @@ func _process(delta: float) -> void:
 		# Lines for the build log: show that the ground was built without a headset.
 		print("[main] frame 100: terrain built=%d pending=%d props=%d character_y=%.2f" % [_terrain.built_count, _terrain.pending_count(), _scatter.prop_count, _character.global_position.y])
 	if _frame == 115:
-		print("[main] frame 115: far ground tris=%d build_ms=%.1f builds=%d cave_look=%s" % [_far.tri_count, _far.build_ms, _far.build_count, str(_in_cave)])
+		print("[main] frame 115: far ground tris=%d build_ms=%.1f builds=%d cave_look=%s lamp=%s" % [_far.tri_count, _far.build_ms, _far.build_count, str(_in_cave), str(_lamp != null and _lamp.visible)])
 	_update_fps(delta)
 	_update_move(delta)
 	_update_ground(delta)
@@ -295,6 +304,7 @@ func _update_flying(delta: float) -> void:
 
 # Under a roof of ground the camera gets a dark background and fog (terrain/cave_look.gd):
 # where the detailed ground ends, tunnels are cut open and the sky would show through.
+# The lamp over the character is on for the same time.
 func _update_cave(delta: float) -> void:
 	_cave_timer += delta
 	if _cave_timer < CAVE_CHECK:
@@ -304,6 +314,8 @@ func _update_cave(delta: float) -> void:
 	if under == _in_cave:
 		return
 	_in_cave = under
+	if _lamp != null:
+		_lamp.visible = under
 	if under:
 		if _cave_env == null:
 			_cave_env = CaveLook.make_environment()

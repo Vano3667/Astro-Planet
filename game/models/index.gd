@@ -1,13 +1,16 @@
 extends RefCounted
 # Single entry point to all model data. Other scripts use only this file:
 #   get_parts(id), get_color(key), get_tint(key), get_catalog().
-# Sets are looked up from the newest to the oldest, so a newer set can replace a model.
+# Sets are looked up in the order 5, 7, 6, 4, 3, 2 (set 1 is inside set 2), so a set that
+# comes earlier in this order can replace a model of a later one.
 # To add a set: write models_setN.gd like models_set4.gd and add it here.
-# Set 5 only replaces existing models (fixes after looking at pictures): no catalog, no palette.
+# Set 5 only replaces existing models (fixes after looking at pictures, and models redone
+# from a description that arrived later): it has no catalog. Since session 25 it has a small
+# palette of its own.
 # Set 6 holds the resource nuggets; the old one-shape "nugget" entries are left out of the
 # catalog (the model itself stays: main.gd may still build it).
-# Set 7 is a DRAFT of plants and research finds that was not checked against the appearance
-# descriptions (see the warning at the top of models_set7.gd). It only adds new models.
+# Set 7 holds plants and research finds made from the appearance description of nature.
+# It only adds new models.
 # SMOOTH_IDS: models of any set whose 12-sided cylinders are rebuilt with more sides
 # (seen on sheets 01, 02 and 05, 2026-11-24: small round bases looked faceted).
 # Set 5 does the same for its own list of models from sets 1 and 2 (with 20 sides).
@@ -68,6 +71,8 @@ static func _smooth(src: Array) -> Array:
 
 
 static func get_color(key: String) -> Color:
+	if Set5.PALETTE5.has(key):
+		return Set5.PALETTE5[key]
 	if Set7.PALETTE7.has(key):
 		return Set7.PALETTE7[key]
 	if Set6.PALETTE6.has(key):

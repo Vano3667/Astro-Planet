@@ -8,7 +8,11 @@ extends RefCounted
 # whole cave was one flat gray-violet tone. The even light was too strong and hid the shape
 # of the walls, so it is halved here; the sun light (which has no shadows) still shades the
 # faces by their direction.
-# Fog property names are written from memory; not seen on a headset.
+# Seen on the pictures of builds 45463833312 and 45483936141: the cave is very dark, the
+# floor and the far wall can hardly be told apart. Since session 25 a lamp hangs over the
+# character under a roof (make_lamp). The lamp is an own idea, not taken from the reference.
+# Fog property names are written from memory; not seen on a headset. The lamp has not been
+# seen on a picture yet.
 
 const VoxelWorld := preload("res://terrain/voxel_world.gd")
 
@@ -20,6 +24,12 @@ const AMBIENT_ENERGY := 0.35
 const FOG_DENSITY := 0.045
 # How far up a roof is searched for, meters.
 const ROOF_RANGE := 60.0
+# The lamp: a warm light without shadows. Own values.
+const LAMP_COLOR := Color(1.0, 0.93, 0.80)
+const LAMP_ENERGY := 1.6
+const LAMP_RANGE := 12.0
+# Height of the lamp above the feet of the character, meters (a little above the head).
+const LAMP_HEIGHT := 2.4
 
 
 static func make_environment() -> Environment:
@@ -33,6 +43,16 @@ static func make_environment() -> Environment:
 	env.fog_light_color = BACKGROUND
 	env.fog_density = FOG_DENSITY
 	return env
+
+
+# The light that follows the character under a roof. The caller places it and shows it.
+static func make_lamp() -> OmniLight3D:
+	var lamp := OmniLight3D.new()
+	lamp.light_color = LAMP_COLOR
+	lamp.light_energy = LAMP_ENERGY
+	lamp.omni_range = LAMP_RANGE
+	lamp.shadow_enabled = false
+	return lamp
 
 
 # True if there is ground somewhere above the point.

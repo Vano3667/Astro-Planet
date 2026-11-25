@@ -5,9 +5,10 @@ extends SceneTree
 #   terrain_3_from_above     the start area from above
 #   terrain_4_far_mountain   the far low-detail ground, looking at the highest point nearby
 #   terrain_5_dig            pits dug into the starter deposits and a mound of added ground
-#   terrain_6_cave           a view from inside the biggest cave found under the start area,
-#                            with the ground loaded around that point and the cave look on,
-#                            as it would be in the game
+#   terrain_6_cave           the biggest cave found under the start area as the game would
+#                            show it: the ground loaded around that point, the cave look on,
+#                            the character on the cave floor with the lamp over it, the
+#                            camera behind the character
 #   terrain_7_mountain_near  the foot of that highest point with detailed ground
 # Needs a real renderer (not --headless); the GitHub build runs it under xvfb.
 # Output folder: env PREVIEW_DIR. Lines for the build log start with TERRAIN_SHOT.
@@ -28,6 +29,10 @@ const START := Vector3(0.0, 0.0, -3.0)
 const MAX_WAIT_FRAMES := 2500
 # The caption size was chosen for a 1024 x 768 picture; it grows with the picture.
 const BASE_H := 768.0
+# As in main.gd: the character walks this far ahead of the viewpoint, and the eyes of a
+# standing player are about this high above the feet of the character.
+const CAM_DISTANCE := 3.0
+const EYE_HEIGHT := 2.4
 
 var _terrain: VoxelWorld
 var _far: FarTerrain
@@ -105,7 +110,7 @@ func _run() -> void:
 	hero.position = Vector3(START.x, ground, START.z)
 
 	# 1 and 2: from where the player's head is at the start.
-	var eye := Vector3(0.0, ground + 2.4, 0.0)
+	var eye := Vector3(0.0, ground + EYE_HEIGHT, 0.0)
 	await _shot("terrain_1_start", eye, Vector3(0.0, ground + 0.6, -9.0))
 
 	var gallery: Node3D = Gallery.new()
@@ -183,10 +188,25 @@ func _run() -> void:
 				best_dir = dir
 		var roof: bool = CaveLook.under_roof(_terrain, cave)
 		print("TERRAIN_SHOT cave x=%.0f y=%.1f z=%.0f density=%.2f free_ahead=%.1f roof=%s frames=%d pending=%d" % [cave.x, cave.y, cave.z, open, best_len, str(roof), frames, _terrain.pending_count()])
+		# As in the game: the character stands on the cave floor ahead of the viewpoint, the
+		# lamp hangs over it, the camera looks at it from behind. Before session 25 this
+		# picture was taken from the open point itself, without the character and the lamp.
+		# The heights are asked from the open point down, where the way is known to be free.
+		var floor_y: float = _terrain.ground_y(cave.x, cave.z, cave.y)
+		var spot: Vector3 = cave + best_dir * CAM_DISTANCE
+		spot.y = _terrain.ground_y(spot.x, spot.z, cave.y)
+		hero.position = spot
+		hero.rotation.y = atan2(-best_dir.x, -best_dir.z)
+		var lamp: OmniLight3D = CaveLook.make_lamp()
+		root.add_child(lamp)
+		lamp.position = spot + Vector3(0.0, CaveLook.LAMP_HEIGHT, 0.0)
+		var cave_eye := Vector3(cave.x, minf(floor_y + EYE_HEIGHT, cave.y), cave.z)
+		print("TERRAIN_SHOT cave_lamp floor=%.1f hero_y=%.1f eye_y=%.1f lamp_y=%.1f" % [floor_y, spot.y, cave_eye.y, lamp.position.y])
 		# The same look that main.gd switches on under a roof.
 		_cam.environment = CaveLook.make_environment()
-		await _shot("terrain_6_cave", cave, cave + best_dir * 5.0)
+		await _shot("terrain_6_cave", cave_eye, spot + Vector3(0.0, 1.0, 0.0) + best_dir * 2.0)
 		_cam.environment = null
+		lamp.queue_free()
 	else:
 		print("TERRAIN_SHOT cave not found, most open density=%.2f" % open)
 
