@@ -2,6 +2,8 @@ extends Node3D
 # Third-person character on editable ground.
 # Left stick: the character walks relative to where the head looks, the camera rig follows.
 # Right stick left or right: the view turns in steps around the character.
+# Right stick up or down: the viewpoint rises or lowers.
+# If ground gets between the character and the viewpoint, the viewpoint moves closer to the character.
 # Right trigger: dig. Right grip: add ground. B: level the ground.
 # A or X: hide and show the model showroom.
 # Under a roof of ground the view gets dark and a lamp over the character switches on.
@@ -33,6 +35,29 @@ const FALL_SPEED := 9.0
 const CAM_DISTANCE := 3.0
 const CAM_HEIGHT := 0.8
 const CAM_FOLLOW := 6.0
+# Own values. Viewpoint height set with the right stick.
+# Limits for the height of the rig above the character's feet, meters.
+# The real height of the head in the room is added on top of it.
+const CAM_HEIGHT_MIN := -0.5
+const CAM_HEIGHT_MAX := 5.0
+# How fast the height changes at full stick, meters per second.
+const CAM_HEIGHT_SPEED := 1.5
+# The stick must be pushed this far up or down, and further than sideways,
+# so that a push for a snap turn does not change the height.
+const CAM_HEIGHT_DEADZONE := 0.4
+# Own values. Keeping the viewpoint out of the ground.
+# The line that is checked for ground starts this high above the character's feet, meters.
+const CAM_PIVOT_HEIGHT := 1.0
+# Free space kept between the viewpoint and the ground along the line, meters.
+const CAM_MARGIN := 0.4
+# The viewpoint does not come closer to the start of the line than this, meters.
+const CAM_MIN_DISTANCE := 0.6
+# Distance between ground checks on the line, meters (the ground cell is 0.5 m).
+const CAM_SAMPLE_STEP := 0.25
+# How fast the viewpoint moves to the character when ground gets in the way,
+# and how fast it moves back when the way is free, meters per second.
+const CAM_PULL_SPEED := 8.0
+const CAM_RELEASE_SPEED := 1.5
 # How often the roof above the camera is checked, seconds.
 const CAVE_CHECK := 0.25
 
@@ -52,6 +77,16 @@ var _far: FarTerrain
 var _tool: DigTool
 var _scatter: Scatter
 var _snap_ready: bool = true
+# Where the rig would be with no ground in the way. Walking, the height and snap turns change
+# this point; _update_camera puts the real rig on it or closer to the character.
+var _rig_ideal: Vector3 = Vector3(0.0, 0.0, 0.0)
+# Height of the rig above the character's feet, meters. Changed with the right stick.
+var _cam_height: float = CAM_HEIGHT
+# How far the viewpoint is moved towards the character now, meters. 0: no ground in the way.
+var _cam_short: float = 0.0
+# True at start and after a snap turn: the next camera update takes the new place at once.
+# A snap turn is a jump of the view already, so nothing is added to it.
+var _cam_cut: bool = true
 # Nuggets that fly from the dig spot to the character: {"node", "from", "t"}.
 var _flying: Array = []
 var _cave_env: Environment
@@ -123,6 +158,7 @@ func _setup_character() -> void:
 	add_child(_character)
 	_character.position = Vector3(0.0, 0.0, -CAM_DISTANCE)
 	xr_origin.position = Vector3(0.0, CAM_HEIGHT, 0.0)
+	_rig_ideal = xr_origin.global_position
 	# The lamp moves with the character and is switched on in _update_cave.
 	_lamp = CaveLook.make_lamp()
 	_lamp.name = "Lamp"
@@ -203,9 +239,11 @@ func _process(delta: float) -> void:
 	if _frame == 115:
 		print("[main] frame 115: far ground tris=%d build_ms=%.1f builds=%d cave_look=%s lamp=%s" % [_far.tri_count, _far.build_ms, _far.build_count, str(_in_cave), str(_lamp != null and _lamp.visible)])
 	_update_fps(delta)
+	_update_cam_height(delta)
 	_update_move(delta)
 	_update_ground(delta)
 	_update_snap_turn()
+	_update_camera(delta)
 	_update_flying(delta)
 	_update_cave(delta)
 
@@ -215,6 +253,17 @@ func _update_fps(delta: float) -> void:
 	if _fps_timer >= 0.5:
 		_fps_timer = 0.0
 		fps_label.text = "%d fps  очередь: %d\n%s\nкурок: копать, хват: насыпать\nB: ровнять, A / X: модели" % [int(Engine.get_frames_per_second()), _terrain.pending_count(), _tool.status_text()]
+
+
+# Right stick up or down: the viewpoint rises or lowers.
+# Only the wanted height changes here; _update_ground moves the rig to it without a jump.
+# Assumed, not checked on the headset: the right stick gives a positive y when pushed up,
+# the same as the left stick does in _update_move.
+func _update_cam_height(delta: float) -> void:
+	var stick: Vector2 = right_hand.get_vector2("primary")
+	if absf(stick.y) < CAM_HEIGHT_DEADZONE or absf(stick.y) <= absf(stick.x):
+		return
+	_cam_height = clampf(_cam_height + stick.y * CAM_HEIGHT_SPEED * delta, CAM_HEIGHT_MIN, CAM_HEIGHT_MAX)
 
 
 func _update_move(delta: float) -> void:
@@ -241,10 +290,10 @@ func _update_move(delta: float) -> void:
 		# A wall or a steep ledge: the character does not walk into it.
 		return
 	_character.global_position = pos + step
-	xr_origin.global_position += step
+	_rig_ideal += step
 
 
-# Keeps the character on the ground and the viewpoint at a fixed height above it.
+# Keeps the character on the ground and the free place of the rig at the chosen height above it.
 func _update_ground(delta: float) -> void:
 	var pos: Vector3 = _character.global_position
 	var ground: float = _terrain.ground_y(pos.x, pos.z, pos.y)
@@ -255,9 +304,7 @@ func _update_ground(delta: float) -> void:
 		y = maxf(ground, y - FALL_SPEED * delta)
 	pos.y = y
 	_character.global_position = pos
-	var rig: Vector3 = xr_origin.global_position
-	rig.y = lerpf(rig.y, y + CAM_HEIGHT, clampf(CAM_FOLLOW * delta, 0.0, 1.0))
-	xr_origin.global_position = rig
+	_rig_ideal.y = lerpf(_rig_ideal.y, y + _cam_height, clampf(CAM_FOLLOW * delta, 0.0, 1.0))
 	_terrain.set_focus(pos)
 	_far.update(pos)
 	_scatter.update(pos)
@@ -272,11 +319,86 @@ func _update_snap_turn() -> void:
 			angle = -angle
 		# The whole rig turns around the character, so the character stays in front.
 		var pivot: Vector3 = _character.global_position
-		var offset: Vector3 = xr_origin.global_position - pivot
-		xr_origin.global_position = pivot + offset.rotated(Vector3.UP, angle)
+		var offset: Vector3 = _rig_ideal - pivot
+		_rig_ideal = pivot + offset.rotated(Vector3.UP, angle)
 		xr_origin.rotate_y(angle)
+		_cam_cut = true
 	elif not _snap_ready and absf(x) < SNAP_RELEASE:
 		_snap_ready = true
+
+
+# Puts the real rig on its place. If ground is between the character and the viewpoint,
+# the viewpoint moves along the checked line towards the character until it is in the air.
+# The game has no engine physics, so the ground is asked point by point (see _in_ground).
+func _update_camera(delta: float) -> void:
+	# Offset of the head from the rig in world axes. It does not depend on where the rig is.
+	var head: Vector3 = xr_camera.global_position - xr_origin.global_position
+	var pivot: Vector3 = _character.global_position + Vector3(0.0, CAM_PIVOT_HEIGHT, 0.0)
+	# Direction of the pull: from the pivot to the free place of the rig, taken at head height.
+	# Sideways moves of the head do not change this direction, so with the viewpoint pulled in
+	# the head still moves the view one to one.
+	var line: Vector3 = _rig_ideal + Vector3(0.0, head.y, 0.0) - pivot
+	var full: float = line.length()
+	if full <= CAM_MIN_DISTANCE:
+		_cam_short = 0.0
+		xr_origin.global_position = _rig_ideal
+		return
+	var dir: Vector3 = line.normalized()
+	# Where the eyes are with no ground in the way, and the start of the checked line near the pivot.
+	var eye: Vector3 = _rig_ideal + head
+	var start: Vector3 = eye - dir * full
+	# The check goes CAM_MARGIN further than the eyes to keep the ground behind them away too.
+	var clear_dist: float = _free_distance(start, dir, full + CAM_MARGIN)
+	var allowed: float = clampf(clear_dist - CAM_MARGIN, CAM_MIN_DISTANCE, full)
+	var want: float = full - allowed
+	if _cam_cut:
+		_cam_cut = false
+		_cam_short = want
+	elif want > _cam_short:
+		_cam_short = minf(want, _cam_short + CAM_PULL_SPEED * delta)
+	else:
+		_cam_short = maxf(want, _cam_short - CAM_RELEASE_SPEED * delta)
+	_cam_short = minf(_cam_short, full - CAM_MIN_DISTANCE)
+	xr_origin.global_position = _rig_ideal - dir * _cam_short
+
+
+# Distance from the point `from` along `dir` to the first ground, meters.
+# Returns `max_dist` when there is no ground on the way.
+func _free_distance(from: Vector3, dir: Vector3, max_dist: float) -> float:
+	var d: float = 0.0
+	var last_free: float = 0.0
+	while d <= max_dist:
+		if _in_ground(from + dir * d):
+			# Halve the last step a few times: the surface is found closer than the sample step,
+			# so the viewpoint does not move in visible steps of CAM_SAMPLE_STEP.
+			var lo: float = last_free
+			var hi: float = d
+			var i: int = 0
+			while i < 4:
+				var mid: float = (lo + hi) * 0.5
+				if _in_ground(from + dir * mid):
+					hi = mid
+				else:
+					lo = mid
+				i += 1
+			return lo
+		last_free = d
+		d += CAM_SAMPLE_STEP
+	if _in_ground(from + dir * max_dist):
+		return last_free
+	return max_dist
+
+
+# True when the point is inside the ground.
+# NOT CHECKED AGAINST THE CODE: voxel_world.gd was not read when this was written.
+# The call is written from docs/agent/A5_TERRAIN.md, which lists `density_at(pos)` and says
+# that a density above zero is ground and below zero is air.
+# Assumed here: `pos` is a Vector3 in world meters and the result is a float.
+# Not known: what density_at returns for a chunk that is not loaded yet.
+# If the build fails on this line, read terrain/voxel_world.gd and fix the call.
+func _in_ground(point: Vector3) -> bool:
+	var density: float = _terrain.density_at(point)
+	return density > 0.0
 
 
 func _update_flying(delta: float) -> void:
