@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 env:
   GODOT_VERSION: "4.7.2"
@@ -194,24 +194,6 @@ jobs:
           name: model-sheets
           path: build/previews/sheets
           if-no-files-found: ignore
-
-      # TEST (branch model-sheets-preview only): commit the smallest sheet to the branch
-      # so that the agent can try to open it as a picture from the repository.
-      - name: Publish smallest sheet to the branch (test)
-        if: always() && github.ref == 'refs/heads/model-sheets-preview'
-        continue-on-error: true
-        run: |
-          set -euo pipefail
-          ls -la build/previews/sheets
-          smallest="$(ls -S build/previews/sheets/*.png | tail -n 1)"
-          echo "PUBLISHING: $smallest ($(stat -c %s "$smallest") bytes)"
-          mkdir -p sheets-preview
-          cp "$smallest" sheets-preview/test_sheet.png
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add sheets-preview/test_sheet.png
-          git commit -m "Test: smallest model sheet ($(basename "$smallest")) from run ${GITHUB_RUN_ID}"
-          git push origin HEAD:model-sheets-preview
 
       - name: Export debug APK
         run: |
