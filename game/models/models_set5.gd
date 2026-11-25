@@ -3,15 +3,17 @@ extends "res://models/models.gd"
 # redone from an appearance description that arrived later.
 # What the agent has seen and what was fixed is logged in docs/REVIEW.md.
 #
-# backpack, explorer (seen: backpack.png, 2026-11-24):
-#   - round slots had 12 sides and looked faceted;
-#   - slots stuck out like buttons instead of looking like sockets;
-#   - the tool on the side read as a plain gray block with an orange bit;
-#   - the stand-alone backpack was a mirror image of the one worn by the explorer.
-#   The layout (bar on top, gauge in the middle, printer panel at the bottom) is an own
-#   layout. The appearance description of the character now exists
-#   (astro-planet-research, data/appearance/character.md, 34 KB) but has not been read: it
-#   did not reach the agent in a long conversation. Redo both models from it in a fresh one.
+# backpack, explorer (session 26): redone from
+#   astro-planet-research/data/appearance/character.md (34 KB, read whole in session 26):
+#   entry 1 (the basic suit), entry 18 (helmet) and entry 19 (backpack).
+#   Taken from the description: overall shape, measured colors, proportions given in
+#   character heights, the number of slots. Sizes in meters and everything marked "own"
+#   below are own. The description also tells about things that cannot be seen on a picture
+#   (what is inside) and about movement; those are not used.
+#   Before that (seen: backpack.png, 2026-11-24) the layout of the backpack was own, the
+#   body of the explorer came from set 2 and the digging tool hung on the side of the
+#   backpack.
+#   NOT SEEN by the agent on a picture yet.
 # rock_large (seen: sheet 03, 2026-11-24): read as a ball with a slab stuck into it.
 # wind_turbine_medium, wind_turbine_large (seen: sheets 02 and 07, 2026-11-24):
 #   the blades were pale and thin, almost invisible against a light background.
@@ -33,10 +35,6 @@ extends "res://models/models.gd"
 #
 # Written without running the engine; checked by tools/check_models.gd.
 
-# Number of parts in _explorer2() before the backpack parts are appended.
-# Keep in sync with models.gd.
-const EXPLORER_BODY_PARTS := 22
-
 # Sides of round details that are looked at from close up.
 const ROUND := 20
 
@@ -44,7 +42,19 @@ const ROUND := 20
 # Models of sets 3 and 4 cannot be listed here: this file sees only sets 1 and 2.
 const SMOOTH_IDS := ["terrain_tool", "worklight", "canister_small", "oxygen_source", "canister_medium", "rtg"]
 
-# Colors of the base buildings as measured in base.md (b_red and b_ramp are own).
+# Own value: the character is 1.5 m tall. The descriptions measure things in character
+# heights; the base buildings below use the same 1.5 m.
+# Backpack body, meters. character.md, entry 19: about 0.45 of a character height wide,
+# 0.55 tall and 0.20 thick.
+const PACK_W := 0.68
+const PACK_H := 0.82
+const PACK_T := 0.30
+# Own: where the backpack sits on the explorer (height of its bottom, depth of its center).
+const PACK_Y := 0.52
+const PACK_Z := 0.335
+
+# Colors of the base buildings as measured in base.md (b_red and b_ramp are own) and of the
+# character and the backpack as measured in character.md (ch_dark and glow_ch_lamp are own).
 # index.gd looks here first.
 const PALETTE5 := {
 	"b_white": Color(0.91, 0.91, 0.91),
@@ -58,6 +68,18 @@ const PALETTE5 := {
 	"b_orange": Color(0.91, 0.345, 0.03),
 	"b_red": Color(0.85, 0.10, 0.08),
 	"b_ramp": Color(0.55, 0.57, 0.60),
+	# character.md, entry 1: white shell, blue suit, gold visor, black gloves and soles
+	"ch_white": Color(0.91, 0.91, 0.91),
+	"ch_blue": Color(0.03, 0.28, 0.60),
+	"ch_gold": Color(0.91, 0.72, 0.03),
+	"ch_black": Color(0.094, 0.094, 0.094),
+	"ch_dark": Color(0.22, 0.22, 0.22),
+	"glow_ch_lamp": Color(1.0, 0.98, 0.90),
+	# character.md, entry 19: blue frame, red slot rims, yellow power marks, cyan oxygen tube
+	"bp_blue": Color(0.03, 0.345, 0.66),
+	"bp_red": Color(0.97, 0.03, 0.03),
+	"glow_bp_power": Color(0.97, 0.85, 0.03),
+	"glow_bp_oxygen": Color(0.03, 0.78, 0.91),
 }
 
 
@@ -163,56 +185,122 @@ static func _ring5(deg: float) -> Vector3:
 	return Vector3(sin(r), 0.0, cos(r))
 
 
-# Backpack body with its details. oy = height of the bottom, oz = center depth,
-# f = +1 if the detailed face looks to +Z (worn on the back), -1 if it looks to -Z.
-# The tool hangs on the right side when you look at the detailed face.
-static func _pack5(oy: float, oz: float, f: float) -> Array:
-	var face: float = oz + f * 0.11
-	var a: Array = [
-		rb(0.46, 0.62, 0.22, 0.0, oy + 0.31, oz, "gray_light", 0.05),
-		# oxygen bar in a dark frame
-		bx(0.37, 0.075, 0.012, 0.0, oy + 0.56, face + f * 0.001, "slot"),
-		bx(0.34, 0.05, 0.016, 0.0, oy + 0.56, face + f * 0.007, "glow_blue"),
-		# printer panel at the bottom of the middle column
-		rb(0.10, 0.11, 0.014, 0.0, oy + 0.115, face + f * 0.003, "gray_dark", 0.01),
-		bx(0.07, 0.045, 0.010, 0.0, oy + 0.13, face + f * 0.011, "glow_cyan"),
+# --- character and backpack from character.md (session 26) ------------------------
+
+# One slot of the backpack: a bright red rim around a dark socket. The slot looks along Z:
+# f = +1 to +Z, f = -1 to -Z; z is the surface it sits on.
+static func _slot5(x: float, y: float, z: float, f: float) -> Array:
+	return [
+		rg(0.125, 0.018, x, y, z + f * 0.004, "bp_red", 90.0),
+		cy(0.092, 0.008, x, y, z + f * 0.003, "slot", 90.0, 0.0, 0.0, -1.0, ROUND),
 	]
-	# two widget slots on top: a light rim and a dark socket
-	for sx in [-1.0, 1.0]:
-		a.append(cy(0.11, 0.016, sx * 0.11, oy + 0.622, oz, "suit_gray", 0.0, 0.0, 0.0, -1.0, ROUND))
-		a.append(cy(0.086, 0.03, sx * 0.11, oy + 0.63, oz, "slot", 0.0, 0.0, 0.0, -1.0, ROUND))
-	# power gauge: five segments above the printer panel
-	for k in 5:
-		a.append(bx(0.045, 0.04, 0.014, 0.0, oy + 0.215 + 0.06 * k, face + f * 0.005, "glow_yellow"))
-	# eight slots in two columns: a light rim with a dark socket in front of it
+
+
+# character.md, entry 19. A flat white box with rounded edges. On the detailed face: a
+# column of glowing yellow power marks in the middle, a glowing cyan oxygen tube across the
+# top, four round slots with red rims on each side of the column (eight in all), a printer
+# at the bottom. Two more slots sit on round ears on the top corners.
+# oy = height of the bottom, oz = center depth, f = +1 if the detailed face looks to +Z
+# (worn on the back), -1 if it looks to -Z.
+# The description gives the body as 0.45 x 0.55 heights but its picture as 444 x 680 points
+# (0.65 wide for 1 tall). Here the ears make up the difference: the body is 0.68 x 0.82 m
+# and with the ears the backpack is 1.035 m tall (0.66 wide for 1 tall). Not seen yet.
+# Own: the number of power marks (8), the shape of the printer, where the blue frame shows
+# (a band around the sides and a plate under the power marks), which way the ear slots look,
+# the blue hinges under the ears.
+static func _pack5(oy: float, oz: float, f: float) -> Array:
+	var face: float = oz + f * PACK_T * 0.5
+	var mid: float = oy + PACK_H * 0.5
+	var a: Array = [
+		rb(PACK_W, PACK_H, PACK_T, 0.0, mid, oz, "ch_white", 0.07),
+		# blue frame: a band that shows on the left and right sides
+		rb(PACK_W + 0.02, PACK_H - 0.14, 0.09, 0.0, mid, oz, "bp_blue", 0.04),
+		# blue plate under the power marks
+		bx(0.13, 0.50, 0.012, 0.0, mid, face + f * 0.002, "bp_blue"),
+		# oxygen tube lying across, above the power marks
+		cp(0.045, 0.30, 0.0, oy + 0.72, face + f * 0.010, "glow_bp_oxygen", 0.0, 0.0, 90.0),
+		# printer: a dark panel with a nozzle
+		rb(0.15, 0.09, 0.02, 0.0, oy + 0.10, face + f * 0.004, "ch_dark", 0.006),
+		cy(0.06, 0.03, 0.0, oy + 0.10, face + f * 0.025, "b_ramp", f * 90.0, 0.0, 0.0, 0.03, 16),
+	]
+	for k in 8:
+		a.append(bx(0.075, 0.038, 0.014, 0.0, oy + 0.215 + 0.055 * float(k), face + f * 0.012, "glow_bp_power"))
 	for j in 4:
-		var y: float = oy + 0.105 + 0.11 * j
-		for sx in [-1.0, 1.0]:
-			a.append(cy(0.100, 0.010, sx * 0.13, y, face + f * 0.002, "suit_gray", 90.0, 0.0, 0.0, -1.0, ROUND))
-			a.append(cy(0.078, 0.012, sx * 0.13, y, face + f * 0.006, "slot", 90.0, 0.0, 0.0, -1.0, ROUND))
-	# digging tool hanging nozzle down on a clip
-	var hx: float = f * 0.285
-	a.append(bx(0.05, 0.10, 0.10, f * 0.245, oy + 0.36, oz, "suit_gray"))
-	a.append(rb(0.09, 0.24, 0.11, hx, oy + 0.36, oz, "suit", 0.03))
-	a.append(rb(0.10, 0.05, 0.12, hx, oy + 0.49, oz, "gray_dark", 0.02))
-	a.append(cy(0.06, 0.10, hx, oy + 0.20, oz, "gray", 0.0, 0.0, 0.0, -1.0, 16))
-	a.append(cy(0.12, 0.09, hx, oy + 0.11, oz, "orange", 0.0, 0.0, 0.0, 0.07, 16))
-	a.append(cy(0.10, 0.012, hx, oy + 0.062, oz, "glow_cyan", 0.0, 0.0, 0.0, -1.0, 16))
+		var y: float = oy + 0.16 + 0.15 * float(j)
+		a.append_array(_slot5(-0.215, y, face, f))
+		a.append_array(_slot5(0.215, y, face, f))
+	for k in 2:
+		var sx: float = float(k) * 2.0 - 1.0
+		var ex: float = sx * 0.235
+		a.append(bx(0.09, 0.07, 0.07, ex, oy + PACK_H + 0.015, oz, "bp_blue"))
+		a.append(cy(0.19, 0.08, ex, oy + 0.94, oz, "ch_white", 90.0, 0.0, 0.0, -1.0, ROUND))
+		a.append_array(_slot5(ex, oy + 0.94, oz + f * 0.04, f))
 	return a
 
 
+# The backpack alone: the detailed face looks to the front (-Z).
+# Own: two blue mount pads on the side that touches the back.
 static func _backpack5() -> Array:
 	var a: Array = _pack5(0.0, 0.0, -1.0)
-	# two straps on the side that touches the back
-	a.append(bx(0.06, 0.46, 0.03, -0.12, 0.31, 0.12, "gray_dark"))
-	a.append(bx(0.06, 0.46, 0.03, 0.12, 0.31, 0.12, "gray_dark"))
+	a.append(rb(0.12, 0.14, 0.03, -0.10, 0.48, 0.16, "bp_blue", 0.01))
+	a.append(rb(0.12, 0.14, 0.03, 0.10, 0.48, 0.16, "bp_blue", 0.01))
 	return a
 
 
-# The explorer from set 2 with the new backpack on the back.
+# character.md, entries 1 and 18. A slim figure with long thin arms and legs and a round
+# helmet: a white shell over a blue suit, a gold visor, black gloves and soles.
+# From the description: shoulders 0.38 of the height (0.57 m), the whole figure with the
+# arms 0.51 of the height wide (0.77 m), the helmet 0.24 wide and 0.26 tall (0.36 x 0.39 m),
+# a block of connectors on the chest, a lamp over the visor, a collar under the helmet,
+# sockets on the sides of the helmet, backpack mounts on the back, a tool mount on the
+# right hip.
+# Own: the height of 1.5 m, the length of the legs and of the torso, which parts are blue
+# (thighs, upper arms, joints, waist, collar), two connectors on the chest and their colors,
+# the gray lamp housing. The visor is plain gold: the builder has no mirror material.
+# The digging tool itself is not on the hip: only the clip is.
+# With the backpack on, the ears of the backpack are 5 cm higher than the helmet.
 static func _explorer5() -> Array:
-	var a: Array = get_parts("explorer").slice(0, EXPLORER_BODY_PARTS)
-	a.append_array(_pack5(0.66, 0.37, 1.0))
+	var a: Array = [
+		# hips, waist, chest shell
+		rb(0.27, 0.12, 0.17, 0.0, 0.76, 0.0, "ch_white", 0.04),
+		cy(0.20, 0.10, 0.0, 0.85, 0.0, "ch_blue", 0.0, 0.0, 0.0, -1.0, 16),
+		rb(0.36, 0.28, 0.22, 0.0, 1.00, 0.0, "ch_white", 0.07),
+		# block of connectors on the chest
+		rb(0.17, 0.10, 0.03, 0.0, 1.02, -0.118, "ch_dark", 0.012),
+		cy(0.045, 0.02, -0.04, 1.02, -0.135, "ch_white", 90.0, 0.0, 0.0, -1.0, 12),
+		cy(0.045, 0.02, 0.04, 1.02, -0.135, "ch_white", 90.0, 0.0, 0.0, -1.0, 12),
+		# collar, helmet, visor
+		cy(0.25, 0.05, 0.0, 1.15, 0.0, "ch_blue", 0.0, 0.0, 0.0, -1.0, ROUND),
+		sp(0.36, 0.39, 0.36, 0.0, 1.305, 0.0, "ch_white"),
+		sp(0.29, 0.26, 0.18, 0.0, 1.31, -0.112, "ch_gold"),
+		# lamp over the visor
+		rb(0.08, 0.04, 0.05, 0.0, 1.455, -0.115, "ch_dark", 0.012),
+		bx(0.05, 0.022, 0.012, 0.0, 1.455, -0.144, "glow_ch_lamp"),
+		# clip for the tool on the right hip (the right side of the model is +X)
+		bx(0.035, 0.09, 0.09, 0.15, 0.75, 0.0, "ch_blue"),
+	]
+	for k in 2:
+		var sx: float = float(k) * 2.0 - 1.0
+		# leg: black sole, white boot and shin, blue knee and thigh
+		var lx: float = sx * 0.085
+		a.append(rb(0.105, 0.05, 0.21, lx, 0.025, -0.02, "ch_black", 0.02))
+		a.append(rb(0.10, 0.10, 0.17, lx, 0.095, -0.005, "ch_white", 0.035))
+		a.append(cy(0.07, 0.30, lx, 0.28, 0.0, "ch_white", 0.0, 0.0, 0.0, 0.09, 12))
+		a.append(sp(0.105, 0.105, 0.105, lx, 0.45, 0.0, "ch_blue"))
+		a.append(cp(0.11, 0.30, lx, 0.60, 0.0, "ch_blue"))
+		# arm: white shoulder, blue upper arm and elbow, thin white forearm, black glove
+		var shoulder := Vector3(sx * 0.235, 1.06, 0.0)
+		var elbow := Vector3(sx * 0.29, 0.83, 0.0)
+		var wrist := Vector3(sx * 0.33, 0.60, 0.0)
+		a.append(sp(0.13, 0.13, 0.13, sx * 0.22, 1.075, 0.0, "ch_white"))
+		a.append(_strut5(0.085, shoulder, elbow, "ch_blue", 12))
+		a.append(sp(0.095, 0.095, 0.095, elbow.x, elbow.y, 0.0, "ch_blue"))
+		a.append(_strut5(0.07, elbow, wrist, "ch_white", 12))
+		a.append(sp(0.095, 0.12, 0.095, sx * 0.337, 0.55, 0.0, "ch_black"))
+		# socket on the side of the helmet, backpack mount on the back
+		a.append(cy(0.08, 0.03, sx * 0.175, 1.305, 0.0, "ch_blue", 0.0, 0.0, 90.0, -1.0, 16))
+		a.append(bx(0.10, 0.12, 0.09, sx * 0.10, 1.00, 0.147, "ch_blue"))
+	a.append_array(_pack5(PACK_Y, PACK_Z, 1.0))
 	return a
 
 
@@ -381,6 +469,6 @@ static func _landing_pad5() -> Array:
 		var r: Vector3 = _ring5(deg)
 		var top: Vector3 = r * 2.00 + Vector3(0.0, 0.50, 0.0)
 		var foot: Vector3 = r * 2.62 + Vector3(0.0, 0.10, 0.0)
-		a.append(_strut5(0.26, top, foot, "b_dark"))
+		a.append(_strut5(0.26, top, foot, "b_leg"))
 		a.append(cy(0.60, 0.10, foot.x, 0.05, foot.z, "b_dark"))
 	return a
